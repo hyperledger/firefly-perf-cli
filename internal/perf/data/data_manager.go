@@ -31,7 +31,7 @@ type dataManager struct {
 }
 
 func (dm *dataManager) Start() error {
-	fmt.Println("\n********** Data **********\n")
+	fmt.Println("********** Data **********")
 	// Broadcast
 	err := dm.RunDataBroadcastTest()
 	if err != nil {
@@ -97,4 +97,9 @@ func (dm *dataManager) getPendingCount(currTime int64) int64 {
 	}
 
 	return txs.Count
+}
+
+func (dm *dataManager) displayMessage(msg string) {
+	fmt.Println("----------------------")
+	fmt.Println(msg)
 }

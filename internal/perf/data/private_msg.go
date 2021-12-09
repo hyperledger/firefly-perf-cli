@@ -9,9 +9,7 @@ import (
 )
 
 func (dm *dataManager) RunDataPrivateMessageTest() error {
-	fmt.Println("--------------------------")
-	fmt.Println("Sending Private Messages...")
-
+	dm.displayMessage("Sending Private Messages...")
 	rate := vegeta.Rate{Freq: dm.config.Frequency, Per: time.Second}
 	targeter := dm.getPrivateMessageTargeter()
 	attacker := vegeta.NewAttacker()

@@ -9,9 +9,7 @@ import (
 )
 
 func (tm *tokenManager) RunTokenTransferTest() error {
-	fmt.Println("-----------------------------")
-	fmt.Println("Transferring Tokens...")
-
+	tm.displayMessage("Transferring...")
 	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
 	targeter := tm.getTokenTransferTargeter()
 	attacker := vegeta.NewAttacker()

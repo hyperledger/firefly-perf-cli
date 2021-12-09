@@ -9,9 +9,7 @@ import (
 )
 
 func (tm *tokenManager) RunTokenBurnTest() error {
-	fmt.Println("--------------------------")
-	fmt.Println("Burning Tokens...")
-
+	tm.displayMessage("Burning...")
 	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
 	targeter := tm.getTokenBurnTargeter()
 	attacker := vegeta.NewAttacker()

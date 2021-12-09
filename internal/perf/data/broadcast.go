@@ -9,9 +9,7 @@ import (
 )
 
 func (dm *dataManager) RunDataBroadcastTest() error {
-	fmt.Println("----------------------------")
-	fmt.Println("Sending Broadcasts...")
-
+	dm.displayMessage("Sending Broadcasts...")
 	rate := vegeta.Rate{Freq: dm.config.Frequency, Per: time.Second}
 	targeter := getBroadcastTargeter(dm.config.Node)
 	attacker := vegeta.NewAttacker()

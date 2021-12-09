@@ -9,9 +9,7 @@ import (
 )
 
 func (tm *tokenManager) RunTokenMintTest() error {
-	fmt.Println("--------------------------")
-	fmt.Println("Benchmarking Tokens: Mint")
-
+	tm.displayMessage("Minting...")
 	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
 	targeter := tm.getTokenMintingTargeter()
 	attacker := vegeta.NewAttacker()

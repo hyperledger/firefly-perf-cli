@@ -37,7 +37,7 @@ type tokenManager struct {
 }
 
 func (tm *tokenManager) Start() error {
-	fmt.Println("\n********** Tokens **********")
+	fmt.Println("********** Tokens **********")
 	// Create Pool
 	err := tm.CreateTokenPool()
 	if err != nil {
@@ -110,4 +110,9 @@ func (tm *tokenManager) getPendingCount(currTime int64) int64 {
 	}
 
 	return txs.Count
+}
+
+func (tm *tokenManager) displayMessage(msg string) {
+	fmt.Println("----------------------")
+	fmt.Println(msg)
 }

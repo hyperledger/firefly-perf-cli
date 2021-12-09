@@ -8,8 +8,7 @@ import (
 )
 
 func (tm *tokenManager) CreateTokenPool() error {
-	fmt.Println("--------------------------")
-	fmt.Printf("Benchmarking Tokens: Creating Pool %s\n", tm.poolName)
+	tm.displayMessage(fmt.Sprintf("Creating Token Pool: %s", tm.poolName))
 	body := fftypes.TokenPool{
 		Name: tm.poolName,
 		Type: fftypes.TokenTypeFungible,
