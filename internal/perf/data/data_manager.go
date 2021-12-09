@@ -31,6 +31,7 @@ type dataManager struct {
 }
 
 func (dm *dataManager) Start() error {
+	fmt.Println("\n********** Data **********\n")
 	// Broadcast
 	err := dm.RunDataBroadcastTest()
 	if err != nil {

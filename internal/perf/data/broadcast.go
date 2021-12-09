@@ -9,7 +9,8 @@ import (
 )
 
 func (dm *dataManager) RunDataBroadcastTest() error {
-	fmt.Println("Running broadcast performance benchmark")
+	fmt.Println("----------------------------")
+	fmt.Println("Sending Broadcasts...")
 
 	rate := vegeta.Rate{Freq: dm.config.Frequency, Per: time.Second}
 	targeter := getBroadcastTargeter(dm.config.Node)

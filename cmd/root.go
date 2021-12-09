@@ -52,7 +52,7 @@ Powered by vegeta, ff-perf will used a configured RPS and duration to benchmark 
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if rootConfig.Node == "" {
-			return errors.New("must provide FireFly node endpoint")
+			return errors.New("Must provide FireFly node endpoint")
 		}
 
 		if perfRunner == nil {
