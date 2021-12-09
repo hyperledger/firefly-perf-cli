@@ -7,8 +7,10 @@ Powered by [Vegeta](https://github.com/tsenart/vegeta), FireFly Performance CLI 
 - [x] Broadcasts
 - [x] Private Messaging
 - [x] Minting Tokens
-- [ ] Transferring Tokens
-- [ ] Burning Tokens
+- [x] Transferring Tokens
+- [x] Burning Tokens
+- [ ] Fungible vs. Non-Fungible Token Toggle
+- [ ] Mint/Transfer/Burn Token with message
 
 ## Results
 
