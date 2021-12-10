@@ -29,6 +29,7 @@ type TokenManager interface {
 	RunTokenMintTest() error
 	RunTokenTransferTest() error
 	RunTokenBurnTest() error
+	RunTokenMintWithMsgTest() error
 }
 
 type tokenManager struct {
@@ -56,6 +57,10 @@ func (tm *tokenManager) Start() error {
 	}
 	// Burn
 	err = tm.RunTokenBurnTest()
+	if err != nil {
+		return err
+	}
+	err = tm.RunTokenMintWithMsgTest()
 	if err != nil {
 		return err
 	}
