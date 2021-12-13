@@ -20,14 +20,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hyperledger/firefly-perf-tests/internal/perf"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var perfRunner *perf.PerfRunner
 
-var rootOptions perf.PerfOptions
+var rootConfig conf.PerfConfig
 
 func GetFireflyAsciiArt() string {
 	s := ""
@@ -50,12 +51,12 @@ FireFly Performance CLI is a tool to generate synthetic load against a FireFly n
 Powered by vegeta, ff-perf will used a configured RPS and duration to benchmark different functions of a FireFly Node.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if rootOptions.Node == "" {
-			return errors.New("must provide FireFly node endpoint")
+		if rootConfig.Node == "" {
+			return errors.New("Must provide FireFly node endpoint")
 		}
 
 		if perfRunner == nil {
-			perfRunner = perf.New(&rootOptions)
+			perfRunner = perf.New(&rootConfig)
 		}
 
 		return nil
@@ -66,6 +67,10 @@ Powered by vegeta, ff-perf will used a configured RPS and duration to benchmark 
 }
 
 func run() error {
+	err := perfRunner.Init()
+	if err != nil {
+		return err
+	}
 	return perfRunner.Start()
 }
 
@@ -73,10 +78,10 @@ func init() {
 	viper.SetEnvPrefix("FP")
 	viper.AutomaticEnv()
 
-	rootCmd.Flags().DurationVarP(&rootOptions.Duration, "duration", "d", 60*time.Second, "Duration of test (seconds)")
-	rootCmd.Flags().IntVarP(&rootOptions.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
-	rootCmd.Flags().StringVarP(&rootOptions.Node, "node", "n", "", "FireFly node endpoint")
-	rootCmd.Flags().StringVarP(&rootOptions.Recipient, "recipient", "r", "", "Recipient for FF messages")
+	rootCmd.Flags().DurationVarP(&rootConfig.Duration, "duration", "d", 60*time.Second, "Duration of test (seconds)")
+	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
+	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "", "FireFly node endpoint")
+	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
 }
 
 func Execute() int {
