@@ -1,6 +1,7 @@
 package tokens
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -16,7 +17,7 @@ func NewTokensManager(client *resty.Client, config *conf.PerfConfig) (TokenManag
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 	tm := &tokenManager{
 		client:   client,
-		config:   config,
+		cfg:      config,
 		poolName: poolName,
 	}
 
@@ -34,7 +35,8 @@ type TokenManager interface {
 
 type tokenManager struct {
 	client   *resty.Client
-	config   *conf.PerfConfig
+	cfg      *conf.PerfConfig
+	ctx      context.Context
 	poolName string
 }
 
@@ -71,7 +73,7 @@ func (tm *tokenManager) Start() error {
 func (tm *tokenManager) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, currTime int64) error {
 	var metrics vegeta.Metrics
 
-	for res := range attacker.Attack(targeter, rate, tm.config.Duration, "FF") {
+	for res := range attacker.Attack(targeter, rate, tm.cfg.Duration, "FF") {
 		metrics.Add(res)
 	}
 	start := time.Now()
@@ -125,7 +127,7 @@ func (tm *tokenManager) getTokenTargeter(method string, ep string, payload strin
 		}
 
 		t.Method = method
-		t.URL = fmt.Sprintf("%s/api/v1/namespaces/default/tokens/%s", tm.config.Node, ep)
+		t.URL = fmt.Sprintf("%s/api/v1/namespaces/default/tokens/%s", tm.cfg.Node, ep)
 		t.Body = []byte(payload)
 		header := http.Header{}
 		header.Add("Accept", "application/json")

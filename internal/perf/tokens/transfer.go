@@ -9,7 +9,7 @@ import (
 
 func (tm *tokenManager) RunTokenTransferTest() error {
 	tm.displayMessage("Transferring...")
-	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
+	rate := vegeta.Rate{Freq: tm.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"amount": "5",
 		"pool": "%s",

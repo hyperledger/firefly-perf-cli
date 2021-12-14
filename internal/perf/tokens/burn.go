@@ -9,7 +9,7 @@ import (
 
 func (tm *tokenManager) RunTokenBurnTest() error {
 	tm.displayMessage("Burning...")
-	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
+	rate := vegeta.Rate{Freq: tm.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"amount": "1",
 		"pool": "%s"

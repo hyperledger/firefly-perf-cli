@@ -10,7 +10,7 @@ import (
 
 func (tm *tokenManager) RunTokenMintWithMsgTest() error {
 	tm.displayMessage("Minting with message...")
-	rate := vegeta.Rate{Freq: tm.config.Frequency, Per: time.Second}
+	rate := vegeta.Rate{Freq: tm.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"pool": "%s",
 		"amount": "10",

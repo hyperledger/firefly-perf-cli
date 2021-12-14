@@ -9,7 +9,7 @@ import (
 
 func (dm *dataManager) RunDataPrivateMessageTest() error {
 	dm.displayMessage("Sending Private Messages...")
-	rate := vegeta.Rate{Freq: dm.config.Frequency, Per: time.Second}
+	rate := vegeta.Rate{Freq: dm.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"data": [
 			{
@@ -25,7 +25,7 @@ func (dm *dataManager) RunDataPrivateMessageTest() error {
 				}
 			]
 		}
-	}`, dm.config.Recipient)
+	}`, dm.cfg.Recipient)
 	targeter := dm.getDataTargeter("POST", "private", payload)
 	attacker := vegeta.NewAttacker()
 

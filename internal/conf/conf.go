@@ -13,4 +13,5 @@ type PerfConfig struct {
 	Duration  time.Duration
 	Node      string
 	Recipient string
+	Workers   int
 }

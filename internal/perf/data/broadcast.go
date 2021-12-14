@@ -8,7 +8,7 @@ import (
 
 func (dm *dataManager) RunDataBroadcastTest() error {
 	dm.displayMessage("Sending Broadcasts...")
-	rate := vegeta.Rate{Freq: dm.config.Frequency, Per: time.Second}
+	rate := vegeta.Rate{Freq: dm.cfg.Frequency, Per: time.Second}
 	payload := `{
 		"data": [
 			{

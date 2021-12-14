@@ -82,6 +82,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "", "FireFly node endpoint")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
+	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers")
 }
 
 func Execute() int {
