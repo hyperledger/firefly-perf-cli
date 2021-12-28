@@ -26,7 +26,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-var perfRunner *perf.PerfRunner
+var perfRunner perf.PerfRunner
 
 var rootConfig conf.PerfConfig
 
@@ -48,15 +48,17 @@ var rootCmd = &cobra.Command{
 	Long: GetFireflyAsciiArt() + `
 FireFly Performance CLI is a tool to generate synthetic load against a FireFly node.
 
-Powered by vegeta, ff-perf will used a configured RPS and duration to benchmark different functions of a FireFly Node.
+Powered by vegeta, ff-perf will use a configured RPS and duration to benchmark different functions of a FireFly Node.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		if rootConfig.Node == "" {
 			return errors.New("Must provide FireFly node endpoint")
 		}
 
-		if perfRunner == nil {
+		if perfRunner == nil && len(args) != 0 {
+			rootConfig.Cmd = args[0]
 			perfRunner = perf.New(&rootConfig)
+
 		}
 
 		return nil
@@ -80,9 +82,10 @@ func init() {
 
 	rootCmd.Flags().DurationVarP(&rootConfig.Duration, "duration", "d", 60*time.Second, "Duration of test (seconds)")
 	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
+	rootCmd.Flags().IntVarP(&rootConfig.Jobs, "jobs", "j", 100, "Number of jobs to run")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "", "FireFly node endpoint")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
-	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers")
+	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 }
 
 func Execute() int {
