@@ -61,6 +61,8 @@ func (pr *perfRunner) Start() error {
 		}
 	}
 
+	diff := pr.cfg.Jobs - pr.cfg.Workers
+
 	for i := 0; i < pr.cfg.Workers; i++ {
 		switch pr.cfg.Cmd {
 		case "broadcast":
@@ -76,10 +78,9 @@ func (pr *perfRunner) Start() error {
 		}
 	}
 
-	for i := 0; i < pr.cfg.Jobs; i++ {
+	for i := 0; i < pr.cfg.Jobs+diff; i++ {
 		pr.bfr <- i
 	}
-
 	pr.shutdown <- true
 
 	return nil
