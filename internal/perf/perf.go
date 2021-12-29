@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -102,7 +101,7 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	start := time.Now()
 	metrics.Close()
 
-	ticker := time.NewTicker(1 * time.Second)
+	ticker := time.NewTicker(3 * time.Second)
 	done := make(chan bool)
 
 	fmt.Println("Waiting for transactions to finish....")
@@ -120,12 +119,6 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	t := time.Now()
 	elapsed := t.Sub(start)
 
-	reporter := vegeta.NewTextReporter(&metrics)
-	err := reporter(os.Stdout)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
 	fmt.Printf("Elapsed time between last message and 0 pending transactions: %s\n", elapsed)
 	return nil
 }
