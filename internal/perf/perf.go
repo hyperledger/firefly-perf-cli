@@ -95,20 +95,22 @@ func getFFClient(node string) *resty.Client {
 func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, currTime int64) error {
 	var metrics vegeta.Metrics
 
+	startTime := time.Now()
 	for res := range attacker.Attack(targeter, rate, pr.cfg.Duration, "FF") {
 		metrics.Add(res)
 	}
+	endTime := time.Now()
 	start := time.Now()
 	metrics.Close()
 
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	done := make(chan bool)
 
 	fmt.Println("Waiting for transactions to finish....")
 	go func() {
 		for {
 			<-ticker.C
-			pendingCount := pr.getPendingCount(currTime)
+			pendingCount := pr.getPendingCount(startTime.Unix(), endTime.Unix())
 			if pendingCount == 0 {
 				done <- true
 			}
@@ -123,17 +125,17 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	return nil
 }
 
-func (pr *perfRunner) getPendingCount(currTime int64) int64 {
+func (pr *perfRunner) getPendingCount(startTime int64, endTime int64) int64 {
 	var txs *conf.FilteredResult
-	res, err := pr.client.R().
+	res, err := pr.client.SetRetryCount(5).SetRetryWaitTime(5 * time.Second).R().
 		SetResult(&txs).
-		Get(fmt.Sprintf("/api/v1/namespaces/default/transactions?count&status=Pending&created=>=%d", currTime))
+		Get(fmt.Sprintf("/api/v1/namespaces/default/transactions?count&status=Pending&created=>=%d&created=<=%d&limit=1", startTime, endTime))
 
 	if err != nil || !res.IsSuccess() {
 		fmt.Printf("Error getting pending count: %s\n", err)
 	}
 
-	return txs.Count
+	return txs.Total
 }
 
 func (pr *perfRunner) getDataTargeter(method string, ep string, payload string) vegeta.Targeter {
