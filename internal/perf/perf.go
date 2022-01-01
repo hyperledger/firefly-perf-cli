@@ -2,13 +2,15 @@ package perf
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly/pkg/wsclient"
+	log "github.com/sirupsen/logrus"
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
@@ -30,9 +32,9 @@ type perfRunner struct {
 	bfr      chan int
 	cfg      *conf.PerfConfig
 	client   *resty.Client
-	ctx      context.Context
 	poolName string
 	shutdown chan bool
+	wsconn   wsclient.WSClient
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
@@ -51,33 +53,43 @@ func (pr *perfRunner) Init() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) Start() error {
-	if pr.cfg.Cmd == "mint" || pr.cfg.Cmd == "mint_with_msg" {
-		pr.poolName = fmt.Sprintf("pool-%s", fftypes.NewUUID())
-		err := pr.CreateTokenPool()
+func (pr *perfRunner) Start() (err error) {
+	// Connect to ws
+	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
+	pr.wsconn, err = wsclient.New(context.Background(), wsConfig, nil)
+	if err != nil {
+		return err
+	}
+	pr.wsconn.Connect()
+
+	// Token pool
+	if containsTokenCmd(pr.cfg.Cmds) {
+		err = pr.CreateTokenPool()
 		if err != nil {
 			return err
 		}
 	}
 
-	diff := pr.cfg.Jobs - pr.cfg.Workers
-
 	for i := 0; i < pr.cfg.Workers; i++ {
-		switch pr.cfg.Cmd {
-		case "broadcast":
+		ptr := i % len(pr.cfg.Cmds)
+
+		switch pr.cfg.Cmds[ptr] {
+		case conf.PerfCmdBroadcast:
 			go pr.RunBroadcast()
-		case "private_msg":
+		case conf.PerfCmdPrivateMsg:
 			go pr.RunPrivateMessage()
-		case "mint":
+		case conf.PerfCmdTokenMint:
 			go pr.RunTokenMint()
-		case "mint_with_msg":
+		case conf.PerfCmdTokenMintWithMessage:
 			go pr.RunTokenMintWithMsg()
-		default:
-			return fmt.Errorf("Invalid Command")
+		case conf.PerfCmdTokenTransfer:
+			go pr.RunTokenTransfer()
+		case conf.PerfCmdTokenBurn:
+			go pr.RunTokenBurn()
 		}
 	}
 
-	for i := 0; i < pr.cfg.Jobs+diff; i++ {
+	for i := 0; i < pr.cfg.Jobs; i++ {
 		pr.bfr <- i
 	}
 	pr.shutdown <- true
@@ -92,50 +104,53 @@ func getFFClient(node string) *resty.Client {
 	return client
 }
 
-func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, currTime int64) error {
+func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, uuid fftypes.UUID) error {
+	var autoack = true
+	startPayload := fftypes.WSClientActionStartPayload{
+		WSClientActionBase: fftypes.WSClientActionBase{
+			Type: fftypes.WSClientActionStart,
+		},
+		AutoAck:   &autoack,
+		Ephemeral: true,
+		Namespace: "default",
+		Filter: fftypes.SubscriptionFilter{
+			Tag: uuid.String(),
+		},
+	}
+	start, _ := json.Marshal(startPayload)
+
+	log.Infof("Receiving Events for: %s\n", uuid.String())
+	err := pr.wsconn.Send(context.Background(), start)
+	if err != nil {
+		log.Errorf("Issuing sending FF event start: %s", err)
+	}
+
 	var metrics vegeta.Metrics
 
-	startTime := time.Now()
 	for res := range attacker.Attack(targeter, rate, pr.cfg.Duration, "FF") {
 		metrics.Add(res)
 	}
-	endTime := time.Now()
-	start := time.Now()
 	metrics.Close()
 
-	ticker := time.NewTicker(1 * time.Second)
-	done := make(chan bool)
+	counter := 0
+	for {
+		select {
+		case msgBytes, ok := <-pr.wsconn.Receive():
+			counter++
+			if !ok {
+				log.Errorf("Error receiving websocket")
+			}
 
-	fmt.Println("Waiting for transactions to finish....")
-	go func() {
-		for {
-			<-ticker.C
-			pendingCount := pr.getPendingCount(startTime.Unix(), endTime.Unix())
-			if pendingCount == 0 {
-				done <- true
+			var event fftypes.EventDelivery
+			err := json.Unmarshal(msgBytes, &event)
+			if err != nil {
+				return err
+			}
+			if counter == int(pr.cfg.Frequency) {
+				return nil
 			}
 		}
-	}()
-	<-done
-
-	t := time.Now()
-	elapsed := t.Sub(start)
-
-	fmt.Printf("Elapsed time between last message and 0 pending transactions: %s\n", elapsed)
-	return nil
-}
-
-func (pr *perfRunner) getPendingCount(startTime int64, endTime int64) int64 {
-	var txs *conf.FilteredResult
-	res, err := pr.client.SetRetryCount(5).SetRetryWaitTime(5 * time.Second).R().
-		SetResult(&txs).
-		Get(fmt.Sprintf("/api/v1/namespaces/default/transactions?count&status=Pending&created=>=%d&created=<=%d&limit=1", startTime, endTime))
-
-	if err != nil || !res.IsSuccess() {
-		fmt.Printf("Error getting pending count: %s\n", err)
 	}
-
-	return txs.Total
 }
 
 func (pr *perfRunner) getDataTargeter(method string, ep string, payload string) vegeta.Targeter {
@@ -173,6 +188,14 @@ func (pr *perfRunner) getTokenTargeter(method string, ep string, payload string)
 	}
 }
 
-func (pr *perfRunner) displayMessage(msg string) {
-	fmt.Println(msg)
+func containsTokenCmd(cmds []fftypes.FFEnum) bool {
+	for _, cmd := range cmds {
+		if cmd == conf.PerfCmdTokenMint ||
+			cmd == conf.PerfCmdTokenMintWithMessage ||
+			cmd == conf.PerfCmdTokenTransfer ||
+			cmd == conf.PerfCmdTokenBurn {
+			return true
+		}
+	}
+	return false
 }

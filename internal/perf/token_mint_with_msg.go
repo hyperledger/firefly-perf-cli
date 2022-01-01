@@ -9,7 +9,7 @@ import (
 )
 
 func (pr *perfRunner) RunTokenMintWithMsg() {
-	pr.displayMessage("Minting with message...")
+	uuid := fftypes.NewUUID()
 	for {
 		select {
 		case <-pr.bfr:
@@ -28,7 +28,7 @@ func (pr *perfRunner) RunTokenMintWithMsg() {
 			targeter := pr.getTokenTargeter("POST", "mint", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, time.Now().Unix())
+			pr.runAndReport(rate, targeter, *attacker, *uuid)
 		case <-pr.shutdown:
 			return
 		}

@@ -2,13 +2,13 @@ package perf
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
+	log "github.com/sirupsen/logrus"
 )
 
 func (pr *perfRunner) CreateTokenPool() error {
-	pr.displayMessage(fmt.Sprintf("Creating Token Pool: %s", pr.poolName))
+	log.Infof("Creating Token Pool: %s", pr.poolName)
 	body := fftypes.TokenPool{
 		Connector: "erc1155",
 		Name:      pr.poolName,

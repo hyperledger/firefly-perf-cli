@@ -22,12 +22,13 @@ import (
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
+	"github.com/hyperledger/firefly/pkg/fftypes"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var perfRunner perf.PerfRunner
-
 var rootConfig conf.PerfConfig
 
 func GetFireflyAsciiArt() string {
@@ -55,10 +56,23 @@ Powered by vegeta, ff-perf will use a configured RPS and duration to benchmark d
 			return errors.New("Must provide FireFly node endpoint")
 		}
 
-		if perfRunner == nil && len(args) != 0 {
-			rootConfig.Cmd = args[0]
-			perfRunner = perf.New(&rootConfig)
+		rootConfig.WebSocket = conf.FireFlyWsConf{
+			APIEndpoint:            fmt.Sprintf("%s/api/v1", rootConfig.Node),
+			WSPath:                 "/ws",
+			ReadBufferSize:         16000,
+			WriteBufferSize:        16000,
+			InitialDelay:           250000000,
+			MaximumDelay:           30000000000,
+			InitialConnectAttempts: 5,
+		}
 
+		if perfRunner == nil && len(args) != 0 {
+			err := validateCommands(args)
+			if err != nil {
+				return err
+			}
+
+			perfRunner = perf.New(&rootConfig)
 		}
 
 		return nil
@@ -90,8 +104,22 @@ func init() {
 
 func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Errorln(err)
 		return 1
 	}
 	return 0
+}
+
+func validateCommands(cmds []string) error {
+	cmdArr := []fftypes.FFEnum{}
+	for _, cmd := range cmds {
+		if val, ok := conf.ValidPerfCommands[cmd]; ok {
+			cmdArr = append(cmdArr, val)
+		} else {
+			return errors.New("One or more commands not valid.")
+		}
+	}
+	rootConfig.Cmds = cmdArr
+
+	return nil
 }
