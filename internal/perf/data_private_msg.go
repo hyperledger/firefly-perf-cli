@@ -8,8 +8,7 @@ import (
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunPrivateMessage() {
-	uuid := fftypes.NewUUID()
+func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -36,7 +35,7 @@ func (pr *perfRunner) RunPrivateMessage() {
 			targeter := pr.getDataTargeter("POST", "private", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, *uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid)
 		case <-pr.shutdown:
 			return
 		}

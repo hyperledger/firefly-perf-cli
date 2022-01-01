@@ -8,8 +8,7 @@ import (
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunTokenMintWithMsg() {
-	uuid := fftypes.NewUUID()
+func (pr *perfRunner) RunTokenMintWithMsg(uuid fftypes.UUID) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -28,7 +27,7 @@ func (pr *perfRunner) RunTokenMintWithMsg() {
 			targeter := pr.getTokenTargeter("POST", "mint", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, *uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid)
 		case <-pr.shutdown:
 			return
 		}

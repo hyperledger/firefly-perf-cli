@@ -18,14 +18,14 @@ type PerfRunner interface {
 	Init() error
 	Start() error
 	// Data
-	RunBroadcast()
-	RunPrivateMessage()
+	RunBroadcast(uuid fftypes.UUID)
+	RunPrivateMessage(uuid fftypes.UUID)
 	// Tokens
 	CreateTokenPool() error
-	RunTokenMint()
-	RunTokenMintWithMsg()
-	RunTokenTransfer()
-	RunTokenBurn()
+	RunTokenMint(uuid fftypes.UUID)
+	RunTokenMintWithMsg(uuid fftypes.UUID)
+	RunTokenTransfer(uuid fftypes.UUID)
+	RunTokenBurn(uuid fftypes.UUID)
 }
 
 type perfRunner struct {
@@ -71,21 +71,23 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	for i := 0; i < pr.cfg.Workers; i++ {
+		workerID := fftypes.NewUUID()
+		pr.startWsClient(*workerID)
 		ptr := i % len(pr.cfg.Cmds)
 
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdBroadcast:
-			go pr.RunBroadcast()
+			go pr.RunBroadcast(*workerID)
 		case conf.PerfCmdPrivateMsg:
-			go pr.RunPrivateMessage()
+			go pr.RunPrivateMessage(*workerID)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint()
+			go pr.RunTokenMint(*workerID)
 		case conf.PerfCmdTokenMintWithMessage:
-			go pr.RunTokenMintWithMsg()
+			go pr.RunTokenMintWithMsg(*workerID)
 		case conf.PerfCmdTokenTransfer:
-			go pr.RunTokenTransfer()
+			go pr.RunTokenTransfer(*workerID)
 		case conf.PerfCmdTokenBurn:
-			go pr.RunTokenBurn()
+			go pr.RunTokenBurn(*workerID)
 		}
 	}
 
@@ -104,7 +106,7 @@ func getFFClient(node string) *resty.Client {
 	return client
 }
 
-func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, uuid fftypes.UUID) error {
+func (pr *perfRunner) startWsClient(uuid fftypes.UUID) {
 	var autoack = true
 	startPayload := fftypes.WSClientActionStartPayload{
 		WSClientActionBase: fftypes.WSClientActionBase{
@@ -124,13 +126,17 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	if err != nil {
 		log.Errorf("Issuing sending FF event start: %s", err)
 	}
+}
 
+func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, uuid fftypes.UUID) error {
+	log.Infof("Began running %s", uuid.String())
 	var metrics vegeta.Metrics
 
 	for res := range attacker.Attack(targeter, rate, pr.cfg.Duration, "FF") {
 		metrics.Add(res)
 	}
 	metrics.Close()
+	log.Infof("Finished running %s", uuid.String())
 
 	counter := 0
 	for {

@@ -8,8 +8,7 @@ import (
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunBroadcast() {
-	uuid := fftypes.NewUUID()
+func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -29,7 +28,7 @@ func (pr *perfRunner) RunBroadcast() {
 			targeter := pr.getDataTargeter("POST", "broadcast", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, *uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid)
 		case <-pr.shutdown:
 			return
 		}

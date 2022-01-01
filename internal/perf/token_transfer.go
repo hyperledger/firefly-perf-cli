@@ -8,8 +8,7 @@ import (
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunTokenTransfer() {
-	uuid := fftypes.NewUUID()
+func (pr *perfRunner) RunTokenTransfer(uuid fftypes.UUID) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -22,7 +21,7 @@ func (pr *perfRunner) RunTokenTransfer() {
 			targeter := pr.getTokenTargeter("POST", "transfers", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, *uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid)
 		case <-pr.shutdown:
 			return
 		}
