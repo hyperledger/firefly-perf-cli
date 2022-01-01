@@ -17,7 +17,7 @@ func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 				"data": [
 					{
 						"value": {
-							"private": "message"
+							"privateUUID": "%s"
 						}
 					}
 				],
@@ -31,7 +31,7 @@ func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 				"header":{
 					"tag":"%s"
 				}
-			}`, pr.cfg.Recipient, uuid)
+			}`, uuid.String(), pr.cfg.Recipient, uuid.String())
 			targeter := pr.getDataTargeter("POST", "private", payload)
 			attacker := vegeta.NewAttacker()
 

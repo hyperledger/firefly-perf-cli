@@ -17,14 +17,14 @@ func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
 				"data":[
 				   {
 					  "value":{
-						 "test":"json"
+						 "broadcastUUID":"%s"
 					  }
 				   }
 				],
 				"header":{
 				   "tag":"%s"
 				}
-			 }`, uuid.String())
+			 }`, uuid.String(), uuid.String())
 			targeter := pr.getDataTargeter("POST", "broadcast", payload)
 			attacker := vegeta.NewAttacker()
 

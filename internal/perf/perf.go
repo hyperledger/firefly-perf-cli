@@ -32,6 +32,7 @@ type perfRunner struct {
 	bfr      chan int
 	cfg      *conf.PerfConfig
 	client   *resty.Client
+	ctx      context.Context
 	poolName string
 	shutdown chan bool
 	wsconn   wsclient.WSClient
@@ -42,6 +43,7 @@ func New(config *conf.PerfConfig) PerfRunner {
 	return &perfRunner{
 		bfr:      make(chan int, config.Workers),
 		cfg:      config,
+		ctx:      context.Background(),
 		poolName: poolName,
 		shutdown: make(chan bool),
 	}
@@ -56,7 +58,7 @@ func (pr *perfRunner) Init() (err error) {
 func (pr *perfRunner) Start() (err error) {
 	// Connect to ws
 	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
-	pr.wsconn, err = wsclient.New(context.Background(), wsConfig, nil)
+	pr.wsconn, err = wsclient.New(pr.ctx, wsConfig, nil)
 	if err != nil {
 		return err
 	}
@@ -155,6 +157,9 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 			if counter == int(pr.cfg.Frequency) {
 				return nil
 			}
+		case <-pr.ctx.Done():
+			log.Errorf("Run loop exiting (context cancelled)")
+			return nil
 		}
 	}
 }
