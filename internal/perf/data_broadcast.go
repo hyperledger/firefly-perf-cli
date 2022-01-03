@@ -24,7 +24,7 @@ func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
 				"header":{
 				   "tag":"%s"
 				}
-			 }`, uuid.String(), uuid.String())
+			 }`, pr.getMessageString(uuid), uuid.String())
 			targeter := pr.getApiTargeter("POST", "messages/broadcast", payload)
 			attacker := vegeta.NewAttacker()
 
@@ -33,4 +33,15 @@ func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
 			return
 		}
 	}
+}
+
+func (pr *perfRunner) getMessageString(uuid fftypes.UUID) string {
+	if pr.cfg.MessageOptions.LongMessage {
+		str := ""
+		for i := 0; i < 20; i++ {
+			str = str + uuid.String()
+		}
+		return str
+	}
+	return uuid.String()
 }

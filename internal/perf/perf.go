@@ -160,7 +160,8 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 					return err
 				}
 				if counter == pr.cfg.Frequency {
-					break
+					log.Infof("%s Finished", uuid.String())
+					return nil
 				}
 			case <-pr.ctx.Done():
 				log.Errorf("Run loop exiting (context cancelled)")

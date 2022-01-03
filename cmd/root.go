@@ -93,6 +93,7 @@ func init() {
 	rootCmd.Flags().DurationVarP(&rootConfig.JobDuration, "jobDuration", "d", 60*time.Second, "Duration of each job done by worker")
 	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) frequency")
 	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of test")
+	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "If messages should include long string")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
 	rootCmd.Flags().BoolVar(&rootConfig.TokenOptions.AttachMessage, "tokenMessage", false, "Attach message to token")

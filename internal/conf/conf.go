@@ -15,21 +15,26 @@ type FilteredResult struct {
 	Total int64       `json:"total"`
 }
 
+type MessageOptions struct {
+	LongMessage bool
+}
+
 type TokenOptions struct {
 	AttachMessage bool
 	TokenType     string
 }
 
 type PerfConfig struct {
-	Cmds         []fftypes.FFEnum
-	Frequency    int
-	JobDuration  time.Duration
-	Length       time.Duration
-	Node         string
-	Recipient    string
-	TokenOptions TokenOptions
-	WebSocket    FireFlyWsConf
-	Workers      int
+	Cmds           []fftypes.FFEnum
+	Frequency      int
+	JobDuration    time.Duration
+	Length         time.Duration
+	MessageOptions MessageOptions
+	Node           string
+	Recipient      string
+	TokenOptions   TokenOptions
+	WebSocket      FireFlyWsConf
+	Workers        int
 }
 
 type FireFlyWsConf struct {
