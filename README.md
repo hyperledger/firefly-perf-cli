@@ -31,3 +31,6 @@ Flags:
   -r, --recipient string    Recipient for FF messages
   -w, --workers int         Number of workers at a time (default 1)
 ```
+
+## Architecture
+<img width="2277" alt="Screen Shot 2022-01-03 at 2 49 10 PM" src="https://user-images.githubusercontent.com/17093033/147973861-422d583f-3a55-437c-b08a-46d214727855.png">
