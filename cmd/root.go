@@ -52,10 +52,6 @@ FireFly Performance CLI is a tool to generate synthetic load against a FireFly n
 Powered by vegeta, ff-perf will use a configured RPS and duration to benchmark different functions of a FireFly Node.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if rootConfig.Node == "" {
-			return errors.New("Must provide FireFly node endpoint")
-		}
-
 		rootConfig.WebSocket = conf.FireFlyWsConf{
 			APIEndpoint:            fmt.Sprintf("%s/api/v1", rootConfig.Node),
 			WSPath:                 "/ws",
@@ -94,11 +90,13 @@ func init() {
 	viper.SetEnvPrefix("FP")
 	viper.AutomaticEnv()
 
-	rootCmd.Flags().DurationVarP(&rootConfig.Duration, "duration", "d", 60*time.Second, "Duration of test (seconds)")
-	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
-	rootCmd.Flags().IntVarP(&rootConfig.Jobs, "jobs", "j", 100, "Number of jobs to run")
-	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "", "FireFly node endpoint")
+	rootCmd.Flags().DurationVarP(&rootConfig.JobDuration, "jobDuration", "d", 60*time.Second, "Duration of each job done by worker")
+	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) frequency")
+	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of test")
+	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
+	rootCmd.Flags().BoolVar(&rootConfig.TokenOptions.AttachMessage, "tokenMessage", false, "Attach message to token")
+	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", "fungible", "Token type [fungible nonfungible]")
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 }
 

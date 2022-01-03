@@ -32,10 +32,10 @@ func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 					"tag":"%s"
 				}
 			}`, uuid.String(), pr.cfg.Recipient, uuid.String())
-			targeter := pr.getDataTargeter("POST", "private", payload)
+			targeter := pr.getApiTargeter("POST", "messages/private", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid, true)
 		case <-pr.shutdown:
 			return
 		}

@@ -18,10 +18,10 @@ func (pr *perfRunner) RunTokenTransfer(uuid fftypes.UUID) {
 				"pool": "%s",
 				"to": "0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 			}`, pr.poolName)
-			targeter := pr.getTokenTargeter("POST", "transfers", payload)
+			targeter := pr.getApiTargeter("POST", "tokens/transfers", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid, true)
 		case <-pr.shutdown:
 			return
 		}

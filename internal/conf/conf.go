@@ -15,15 +15,21 @@ type FilteredResult struct {
 	Total int64       `json:"total"`
 }
 
+type TokenOptions struct {
+	AttachMessage bool
+	TokenType     string
+}
+
 type PerfConfig struct {
-	Cmds      []fftypes.FFEnum
-	Duration  time.Duration
-	Frequency int
-	Jobs      int
-	Node      string
-	Recipient string
-	WebSocket FireFlyWsConf
-	Workers   int
+	Cmds         []fftypes.FFEnum
+	Frequency    int
+	JobDuration  time.Duration
+	Length       time.Duration
+	Node         string
+	Recipient    string
+	TokenOptions TokenOptions
+	WebSocket    FireFlyWsConf
+	Workers      int
 }
 
 type FireFlyWsConf struct {
@@ -51,14 +57,14 @@ func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
 }
 
 var (
+	// PerfCmdGetTransactions sends GET requests to /transactions
+	PerfCmdGetTransactions fftypes.FFEnum = "api_get_txs"
 	// PerfCmdBroadcast sends broadcast messages
 	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
 	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdTokenMintWithMessage mints tokens with attached message in a token pool
-	PerfCmdTokenMintWithMessage fftypes.FFEnum = "token_mint_with_msg"
 	// PerfCmdTokenTransfer mints tokens in a token pool
 	PerfCmdTokenTransfer fftypes.FFEnum = "token_transfer"
 	// PerfCmdTokenBurn burns tokens in a token pool
@@ -66,12 +72,12 @@ var (
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdBroadcast.String():            PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String():           PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():            PerfCmdTokenMint,
-	PerfCmdTokenMintWithMessage.String(): PerfCmdTokenMintWithMessage,
-	PerfCmdTokenTransfer.String():        PerfCmdTokenTransfer,
-	PerfCmdTokenBurn.String():            PerfCmdTokenBurn,
+	PerfCmdGetTransactions.String(): PerfCmdGetTransactions,
+	PerfCmdBroadcast.String():       PerfCmdBroadcast,
+	PerfCmdPrivateMsg.String():      PerfCmdPrivateMsg,
+	PerfCmdTokenMint.String():       PerfCmdTokenMint,
+	PerfCmdTokenTransfer.String():   PerfCmdTokenTransfer,
+	PerfCmdTokenBurn.String():       PerfCmdTokenBurn,
 }
 
 func ValidCommandsString() []string {

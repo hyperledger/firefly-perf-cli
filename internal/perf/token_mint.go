@@ -17,10 +17,23 @@ func (pr *perfRunner) RunTokenMint(uuid fftypes.UUID) {
 				"pool": "%s",
 				"amount": "10"
 			}`, pr.poolName)
-			targeter := pr.getTokenTargeter("POST", "mint", payload)
+			if pr.cfg.TokenOptions.AttachMessage {
+				payload = fmt.Sprintf(`{
+					"pool": "%s",
+					"amount": "10",
+					"message": {
+						"data": [
+							{
+								"value": "PerformanceTest-%s"
+							}
+						]
+					}
+				}`, pr.poolName, uuid)
+			}
+			targeter := pr.getApiTargeter("POST", "tokens/mint", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid)
+			pr.runAndReport(rate, targeter, *attacker, uuid, true)
 		case <-pr.shutdown:
 			return
 		}

@@ -23,11 +23,13 @@ Usage:
   ff-perf [flags]
 
 Flags:
-  -d, --duration duration   Duration of test (seconds) (default 1m0s)
-  -f, --frequency int       Requests Per Second (RPS) frequency (default 50)
-  -h, --help                help for ff-perf
-  -j, --jobs int            Number of jobs to run (default 100)
-  -n, --node string         FireFly node endpoint
-  -r, --recipient string    Recipient for FF messages
-  -w, --workers int         Number of workers at a time (default 1)
+  -f, --frequency int          Requests Per Second (RPS) frequency (default 10)
+  -h, --help                   help for ff-perf
+  -d, --jobDuration duration   Duration of each job done by worker (default 1m0s)
+  -l, --length duration        Length of test (default 1m0s)
+  -n, --node string            FireFly node endpoint (default "http://localhost:5000")
+  -r, --recipient string       Recipient for FF messages
+      --tokenMessage           Attach message to token
+      --tokenType string       Token type [fungible nonfungible] (default "fungible")
+  -w, --workers int            Number of workers at a time (default 1)
 ```

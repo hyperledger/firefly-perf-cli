@@ -12,7 +12,7 @@ func (pr *perfRunner) CreateTokenPool() error {
 	body := fftypes.TokenPool{
 		Connector: "erc1155",
 		Name:      pr.poolName,
-		Type:      fftypes.TokenTypeFungible,
+		Type:      getTokenTypeEnum(pr.cfg.TokenOptions.TokenType),
 	}
 
 	res, err := pr.client.R().
@@ -24,4 +24,11 @@ func (pr *perfRunner) CreateTokenPool() error {
 		return errors.New("Failed to create token pool")
 	}
 	return err
+}
+
+func getTokenTypeEnum(tokenType string) fftypes.FFEnum {
+	if tokenType == "nonfungible" {
+		return fftypes.TokenTypeNonFungible
+	}
+	return fftypes.TokenTypeFungible
 }
