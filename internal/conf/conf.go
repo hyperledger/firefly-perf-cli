@@ -2,6 +2,7 @@ package conf
 
 import (
 	"net/url"
+	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -51,17 +52,17 @@ func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
 
 var (
 	// PerfCmdBroadcast sends broadcast messages
-	PerfCmdBroadcast fftypes.FFEnum = "broadcast"
+	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
 	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium
-	PerfCmdPrivateMsg fftypes.FFEnum = "private_msg"
+	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
-	PerfCmdTokenMint fftypes.FFEnum = "mint"
+	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
 	// PerfCmdTokenMintWithMessage mints tokens with attached message in a token pool
-	PerfCmdTokenMintWithMessage fftypes.FFEnum = "mint_with_msg"
+	PerfCmdTokenMintWithMessage fftypes.FFEnum = "token_mint_with_msg"
 	// PerfCmdTokenTransfer mints tokens in a token pool
-	PerfCmdTokenTransfer fftypes.FFEnum = "transfer"
+	PerfCmdTokenTransfer fftypes.FFEnum = "token_transfer"
 	// PerfCmdTokenBurn burns tokens in a token pool
-	PerfCmdTokenBurn fftypes.FFEnum = "burn"
+	PerfCmdTokenBurn fftypes.FFEnum = "token_burn"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
@@ -71,4 +72,13 @@ var ValidPerfCommands = map[string]fftypes.FFEnum{
 	PerfCmdTokenMintWithMessage.String(): PerfCmdTokenMintWithMessage,
 	PerfCmdTokenTransfer.String():        PerfCmdTokenTransfer,
 	PerfCmdTokenBurn.String():            PerfCmdTokenBurn,
+}
+
+func ValidCommandsString() []string {
+	keys := make([]string, 0, len(ValidPerfCommands))
+	for key := range ValidPerfCommands {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }

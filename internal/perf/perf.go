@@ -101,13 +101,6 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func getFFClient(node string) *resty.Client {
-	client := resty.New()
-	client.SetHostURL(node)
-
-	return client
-}
-
 func (pr *perfRunner) startWsClient(uuid fftypes.UUID) {
 	var autoack = true
 	startPayload := fftypes.WSClientActionStartPayload{
@@ -131,6 +124,7 @@ func (pr *perfRunner) startWsClient(uuid fftypes.UUID) {
 }
 
 func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, uuid fftypes.UUID) error {
+	// Execute vegeta
 	log.Infof("Began running %s", uuid.String())
 	var metrics vegeta.Metrics
 
@@ -140,6 +134,7 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	metrics.Close()
 	log.Infof("Finished running %s", uuid.String())
 
+	// Wait for all transactions to confirm/reject
 	counter := 0
 	for {
 		select {
@@ -209,4 +204,11 @@ func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 		}
 	}
 	return false
+}
+
+func getFFClient(node string) *resty.Client {
+	client := resty.New()
+	client.SetHostURL(node)
+
+	return client
 }

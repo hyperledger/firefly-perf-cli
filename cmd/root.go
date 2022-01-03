@@ -112,12 +112,18 @@ func Execute() int {
 
 func validateCommands(cmds []string) error {
 	cmdArr := []fftypes.FFEnum{}
+	cmdSet := make(map[fftypes.FFEnum]bool, 0)
 	for _, cmd := range cmds {
+		// Create set to remove duplicate commands, if any
 		if val, ok := conf.ValidPerfCommands[cmd]; ok {
-			cmdArr = append(cmdArr, val)
+			cmdSet[val] = true
 		} else {
-			return errors.New("One or more commands not valid.")
+			return errors.New(fmt.Sprintf("Commands not valid. Choose from %v", conf.ValidCommandsString()))
 		}
+	}
+	// Final command array
+	for cmd := range cmdSet {
+		cmdArr = append(cmdArr, cmd)
 	}
 	rootConfig.Cmds = cmdArr
 
