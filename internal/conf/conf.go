@@ -63,7 +63,7 @@ func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
 
 var (
 	// PerfCmdGetTransactions sends GET requests to /transactions
-	PerfCmdGetTransactions fftypes.FFEnum = "api_get_txs"
+	PerfCmdGetTransactions fftypes.FFEnum = "get_txs"
 	// PerfCmdBroadcast sends broadcast messages
 	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
 	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium

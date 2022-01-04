@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
+func (pr *perfRunner) RunPrivateMessage(id string) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -17,7 +16,7 @@ func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 				"data": [
 					{
 						"value": {
-							"privateUUID": "%s"
+							"privateID": "%s"
 						}
 					}
 				],
@@ -31,11 +30,11 @@ func (pr *perfRunner) RunPrivateMessage(uuid fftypes.UUID) {
 				"header":{
 					"tag":"%s"
 				}
-			}`, uuid.String(), pr.cfg.Recipient, uuid.String())
+			}`, id, pr.cfg.Recipient, id)
 			targeter := pr.getApiTargeter("POST", "messages/private", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid, true)
+			pr.runAndReport(rate, targeter, *attacker, id, true)
 		case <-pr.shutdown:
 			return
 		}

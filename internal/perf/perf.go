@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -19,13 +20,13 @@ type PerfRunner interface {
 	Init() error
 	Start() error
 	// Data
-	RunBroadcast(uuid fftypes.UUID)
-	RunPrivateMessage(uuid fftypes.UUID)
+	RunBroadcast(id string)
+	RunPrivateMessage(id string)
 	// Tokens
 	CreateTokenPool() error
-	RunTokenMint(uuid fftypes.UUID)
-	RunTokenTransfer(uuid fftypes.UUID)
-	RunTokenBurn(uuid fftypes.UUID)
+	RunTokenMint(id string)
+	RunTokenTransfer(id string)
+	RunTokenBurn(id string)
 }
 
 type perfRunner struct {
@@ -36,7 +37,7 @@ type perfRunner struct {
 	endTime  int64
 	poolName string
 	shutdown chan bool
-	wsconn   wsclient.WSClient
+	wsconns  []wsclient.WSClient
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
@@ -48,6 +49,7 @@ func New(config *conf.PerfConfig) PerfRunner {
 		endTime:  time.Now().Unix() + int64(config.Length.Seconds()),
 		poolName: poolName,
 		shutdown: make(chan bool),
+		wsconns:  make([]wsclient.WSClient, config.Workers),
 	}
 }
 
@@ -58,14 +60,6 @@ func (pr *perfRunner) Init() (err error) {
 }
 
 func (pr *perfRunner) Start() (err error) {
-	// Connect to ws
-	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
-	pr.wsconn, err = wsclient.New(pr.ctx, wsConfig, nil)
-	if err != nil {
-		return err
-	}
-	pr.wsconn.Connect()
-
 	// Create token pool, if needed
 	if containsTokenCmd(pr.cfg.Cmds) {
 		err = pr.CreateTokenPool()
@@ -74,27 +68,28 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
-	for i := 0; i < pr.cfg.Workers; i++ {
-		workerID := fftypes.NewUUID()
-		err = pr.startWsClient(*workerID)
+	for id := 0; id < pr.cfg.Workers; id++ {
+		err = pr.openWsClient(id)
 		if err != nil {
 			return err
 		}
-		ptr := i % len(pr.cfg.Cmds)
+		idString := strconv.Itoa(id)
+		ptr := id % len(pr.cfg.Cmds)
 
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdGetTransactions:
-			go pr.RunGetTransactions(*workerID)
+			pr.wsconns[id].Close()
+			go pr.RunGetTransactions(idString)
 		case conf.PerfCmdBroadcast:
-			go pr.RunBroadcast(*workerID)
+			go pr.RunBroadcast(idString)
 		case conf.PerfCmdPrivateMsg:
-			go pr.RunPrivateMessage(*workerID)
+			go pr.RunPrivateMessage(idString)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint(*workerID)
+			go pr.RunTokenMint(idString)
 		case conf.PerfCmdTokenTransfer:
-			go pr.RunTokenTransfer(*workerID)
+			go pr.RunTokenTransfer(idString)
 		case conf.PerfCmdTokenBurn:
-			go pr.RunTokenBurn(*workerID)
+			go pr.RunTokenBurn(idString)
 		}
 	}
 
@@ -109,7 +104,15 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) startWsClient(uuid fftypes.UUID) error {
+func (pr *perfRunner) openWsClient(idx int) (err error) {
+	// Connect to ws
+	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
+	pr.wsconns[idx], err = wsclient.New(pr.ctx, wsConfig, nil)
+	if err != nil {
+		return err
+	}
+	pr.wsconns[idx].Connect()
+
 	var autoack = true
 	startPayload := fftypes.WSClientActionStartPayload{
 		WSClientActionBase: fftypes.WSClientActionBase{
@@ -119,24 +122,24 @@ func (pr *perfRunner) startWsClient(uuid fftypes.UUID) error {
 		Ephemeral: true,
 		Namespace: "default",
 		Filter: fftypes.SubscriptionFilter{
-			Tag: uuid.String(),
+			Tag: strconv.Itoa(idx),
 		},
 	}
 	start, _ := json.Marshal(startPayload)
 
-	err := pr.wsconn.Send(context.Background(), start)
+	err = pr.wsconns[idx].Send(context.Background(), start)
 	if err != nil {
 		log.Errorf("Issuing sending FF event start: %s", err)
 		return err
 	}
-	log.Infof("Receiving Events for: %s\n", uuid.String())
+	log.Infof("Receiving Events for: %s\n", strconv.Itoa(idx))
 
 	return nil
 }
 
-func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, uuid fftypes.UUID, confirmTransactions bool) error {
+func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, id string, confirmTransactions bool) error {
 	// Execute vegeta
-	log.Infof("%s Running", uuid.String())
+	log.Infof("%s Running", id)
 	var metrics vegeta.Metrics
 	for res := range attacker.Attack(targeter, rate, pr.cfg.JobDuration, "FF") {
 		metrics.Add(res)
@@ -146,9 +149,13 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 	if confirmTransactions {
 		// Wait for all transactions to confirm/reject
 		counter := 0
+		idInt, err := strconv.Atoi(id)
+		if err != nil {
+			return err
+		}
 		for {
 			select {
-			case msgBytes, ok := <-pr.wsconn.Receive():
+			case msgBytes, ok := <-pr.wsconns[idInt].Receive():
 				counter++
 				if !ok {
 					log.Errorf("Error receiving websocket")
@@ -160,7 +167,7 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 					return err
 				}
 				if counter == pr.cfg.Frequency {
-					log.Infof("%s Finished", uuid.String())
+					log.Infof("%s Finished", id)
 					return nil
 				}
 			case <-pr.ctx.Done():
@@ -170,7 +177,7 @@ func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, a
 		}
 	}
 
-	log.Infof("%s Finished", uuid.String())
+	log.Infof("%s Finished", id)
 	return nil
 }
 

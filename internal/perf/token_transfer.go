@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunTokenTransfer(uuid fftypes.UUID) {
+func (pr *perfRunner) RunTokenTransfer(id string) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -21,7 +20,7 @@ func (pr *perfRunner) RunTokenTransfer(uuid fftypes.UUID) {
 			targeter := pr.getApiTargeter("POST", "tokens/transfers", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid, true)
+			pr.runAndReport(rate, targeter, *attacker, id, true)
 		case <-pr.shutdown:
 			return
 		}

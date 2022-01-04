@@ -3,11 +3,10 @@ package perf
 import (
 	"time"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunGetTransactions(uuid fftypes.UUID) {
+func (pr *perfRunner) RunGetTransactions(id string) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -15,7 +14,7 @@ func (pr *perfRunner) RunGetTransactions(uuid fftypes.UUID) {
 			targeter := pr.getApiTargeter("GET", "transactions", "")
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid, false)
+			pr.runAndReport(rate, targeter, *attacker, id, false)
 		case <-pr.shutdown:
 			return
 		}

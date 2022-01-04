@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
 	vegeta "github.com/tsenart/vegeta/lib"
 )
 
-func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
+func (pr *perfRunner) RunBroadcast(id string) {
 	for {
 		select {
 		case <-pr.bfr:
@@ -17,31 +16,31 @@ func (pr *perfRunner) RunBroadcast(uuid fftypes.UUID) {
 				"data":[
 				   {
 					  "value":{
-						 "broadcastUUID":"%s"
+						 "broadcastID":"%s"
 					  }
 				   }
 				],
 				"header":{
 				   "tag":"%s"
 				}
-			 }`, pr.getMessageString(uuid), uuid.String())
+			 }`, pr.getMessageString(id), id)
 			targeter := pr.getApiTargeter("POST", "messages/broadcast", payload)
 			attacker := vegeta.NewAttacker()
 
-			pr.runAndReport(rate, targeter, *attacker, uuid, true)
+			pr.runAndReport(rate, targeter, *attacker, id, true)
 		case <-pr.shutdown:
 			return
 		}
 	}
 }
 
-func (pr *perfRunner) getMessageString(uuid fftypes.UUID) string {
+func (pr *perfRunner) getMessageString(id string) string {
 	if pr.cfg.MessageOptions.LongMessage {
 		str := ""
-		for i := 0; i < 20; i++ {
-			str = str + uuid.String()
+		for i := 0; i < 100; i++ {
+			str = str + id
 		}
 		return str
 	}
-	return uuid.String()
+	return id
 }
