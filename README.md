@@ -22,6 +22,9 @@ FireFly Performance CLI is a HTTP load testing tool that leverages [Vegeta](http
 Usage:
   ff-perf [flags]
 
+Commands:
+  get_txs, msg_broadcast, msg_private, token_burn, token_mint, token_transfer
+
 Flags:
   -f, --frequency int          Requests Per Second (RPS) of each worker (default 10)
   -h, --help                   help for ff-perf
