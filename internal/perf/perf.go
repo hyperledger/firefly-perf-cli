@@ -20,13 +20,13 @@ type PerfRunner interface {
 	Init() error
 	Start() error
 	// Data
-	RunBroadcast(id string)
-	RunPrivateMessage(id string)
+	RunBroadcast(id int)
+	RunPrivateMessage(id int)
 	// Tokens
 	CreateTokenPool() error
-	RunTokenMint(id string)
-	RunTokenTransfer(id string)
-	RunTokenBurn(id string)
+	RunTokenMint(id int)
+	RunTokenTransfer(id int)
+	RunTokenBurn(id int)
 }
 
 type perfRunner struct {
@@ -36,18 +36,26 @@ type perfRunner struct {
 	ctx      context.Context
 	endTime  int64
 	poolName string
+	rcvBfr   []chan bool
 	shutdown chan bool
 	wsconns  []wsclient.WSClient
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
+	var receiveChannelArray []chan bool
+
+	for i := 0; i < config.Workers; i++ {
+		receiveChannelArray = append(receiveChannelArray, make(chan bool))
+	}
+
 	return &perfRunner{
 		bfr:      make(chan int, config.Workers),
 		cfg:      config,
 		ctx:      context.Background(),
 		endTime:  time.Now().Unix() + int64(config.Length.Seconds()),
 		poolName: poolName,
+		rcvBfr:   receiveChannelArray,
 		shutdown: make(chan bool),
 		wsconns:  make([]wsclient.WSClient, config.Workers),
 	}
@@ -73,23 +81,25 @@ func (pr *perfRunner) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		idString := strconv.Itoa(id)
+
+		go pr.eventLoop(id)
+
 		ptr := id % len(pr.cfg.Cmds)
 
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdGetTransactions:
 			pr.wsconns[id].Close()
-			go pr.RunGetTransactions(idString)
+			go pr.RunGetTransactions(id)
 		case conf.PerfCmdBroadcast:
-			go pr.RunBroadcast(idString)
+			go pr.RunBroadcast(id)
 		case conf.PerfCmdPrivateMsg:
-			go pr.RunPrivateMessage(idString)
+			go pr.RunPrivateMessage(id)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint(idString)
+			go pr.RunTokenMint(id)
 		case conf.PerfCmdTokenTransfer:
-			go pr.RunTokenTransfer(idString)
+			go pr.RunTokenTransfer(id)
 		case conf.PerfCmdTokenBurn:
-			go pr.RunTokenBurn(idString)
+			go pr.RunTokenBurn(id)
 		}
 	}
 
@@ -105,7 +115,6 @@ func (pr *perfRunner) Start() (err error) {
 }
 
 func (pr *perfRunner) openWsClient(idx int) (err error) {
-	// Connect to ws
 	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
 	pr.wsconns[idx], err = wsclient.New(pr.ctx, wsConfig, nil)
 	if err != nil {
@@ -137,48 +146,48 @@ func (pr *perfRunner) openWsClient(idx int) (err error) {
 	return nil
 }
 
-func (pr *perfRunner) runAndReport(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, id string, confirmTransactions bool) error {
-	// Execute vegeta
-	log.Infof("%s Running", id)
-	var metrics vegeta.Metrics
-	for res := range attacker.Attack(targeter, rate, pr.cfg.JobDuration, "FF") {
-		metrics.Add(res)
-	}
-	metrics.Close()
+func (pr *perfRunner) eventLoop(id int) {
+	// if confirmTransactions {
+	counter := 0
 
-	if confirmTransactions {
-		// Wait for all transactions to confirm/reject
-		counter := 0
-		idInt, err := strconv.Atoi(id)
-		if err != nil {
-			return err
-		}
-		for {
-			select {
-			case msgBytes, ok := <-pr.wsconns[idInt].Receive():
-				counter++
-				if !ok {
-					log.Errorf("Error receiving websocket")
-				}
-
-				var event fftypes.EventDelivery
-				err := json.Unmarshal(msgBytes, &event)
-				if err != nil {
-					return err
-				}
-				if counter == pr.cfg.Frequency {
-					log.Infof("%s Finished", id)
-					return nil
-				}
-			case <-pr.ctx.Done():
-				log.Errorf("Run loop exiting (context cancelled)")
-				return nil
+	for {
+		select {
+		case msgBytes, ok := <-pr.wsconns[id].Receive():
+			if !ok {
+				log.Errorf("Error receiving websocket")
 			}
+
+			var event fftypes.EventDelivery
+			json.Unmarshal(msgBytes, &event)
+
+			counter++
+			if counter == pr.cfg.Frequency {
+				counter = 0
+				pr.rcvBfr[id] <- true
+			}
+		case <-pr.ctx.Done():
+			log.Errorf("Run loop exiting (context cancelled)")
 		}
 	}
+	// }
+}
 
-	log.Infof("%s Finished", id)
-	return nil
+func (pr *perfRunner) runAttacker(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, id int) error {
+	for {
+		select {
+		case <-pr.bfr:
+			log.Infof("%d --> Running", id)
+			var metrics vegeta.Metrics
+			for res := range attacker.Attack(targeter, rate, pr.cfg.JobDuration, "FF") {
+				metrics.Add(res)
+			}
+			metrics.Close()
+			<-pr.rcvBfr[id]
+			log.Infof("%d <-- Finished", id)
+		case <-pr.shutdown:
+			return nil
+		}
+	}
 }
 
 func (pr *perfRunner) getApiTargeter(method string, ep string, payload string) vegeta.Targeter {
