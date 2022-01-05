@@ -31,3 +31,7 @@ Flags:
   -r, --recipient string    Recipient for FF messages
   -w, --workers int         Number of workers at a time (default 1)
 ```
+
+## Architecture
+
+![Architecture](./images/architecture.png)
