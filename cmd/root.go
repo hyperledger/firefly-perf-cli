@@ -62,8 +62,12 @@ Powered by vegeta, ff-perf will use a configured RPS and duration to benchmark d
 			InitialConnectAttempts: 5,
 		}
 
-		if perfRunner == nil && len(args) != 0 {
+		if perfRunner == nil {
 			err := validateCommands(args)
+			if err != nil {
+				return err
+			}
+			err = validateConfig(rootConfig)
 			if err != nil {
 				return err
 			}
@@ -91,13 +95,13 @@ func init() {
 	viper.AutomaticEnv()
 
 	rootCmd.Flags().DurationVarP(&rootConfig.JobDuration, "jobDuration", "d", 60*time.Second, "Duration of each job done by worker")
-	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) frequency")
-	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of test")
-	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "If messages should include long string")
-	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint")
-	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
+	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) of each worker")
+	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of entire performance test")
+	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
+	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")
+	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
 	rootCmd.Flags().BoolVar(&rootConfig.TokenOptions.AttachMessage, "tokenMessage", false, "Attach message to token")
-	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", "fungible", "Token type [fungible nonfungible]")
+	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 }
 
@@ -113,18 +117,28 @@ func validateCommands(cmds []string) error {
 	cmdArr := []fftypes.FFEnum{}
 	cmdSet := make(map[fftypes.FFEnum]bool, 0)
 	for _, cmd := range cmds {
-		// Create set to remove duplicate commands, if any
 		if val, ok := conf.ValidPerfCommands[cmd]; ok {
 			cmdSet[val] = true
 		} else {
 			return errors.New(fmt.Sprintf("Commands not valid. Choose from %v", conf.ValidCommandsString()))
 		}
 	}
-	// Final command array
 	for cmd := range cmdSet {
 		cmdArr = append(cmdArr, cmd)
 	}
+
+	if len(cmdArr) == 0 {
+		return errors.New(fmt.Sprintf("Must specify at least one command. Choose from %v", conf.ValidCommandsString()))
+	}
 	rootConfig.Cmds = cmdArr
+
+	return nil
+}
+
+func validateConfig(cfg conf.PerfConfig) error {
+	if cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
+		return errors.New(fmt.Sprintf("Invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
+	}
 
 	return nil
 }

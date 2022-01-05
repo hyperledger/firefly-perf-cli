@@ -30,34 +30,34 @@ type PerfRunner interface {
 }
 
 type perfRunner struct {
-	bfr      chan int
-	cfg      *conf.PerfConfig
-	client   *resty.Client
-	ctx      context.Context
-	endTime  int64
-	poolName string
-	rcvBfr   []chan bool
-	shutdown chan bool
-	wsconns  []wsclient.WSClient
+	bfr         chan int
+	cfg         *conf.PerfConfig
+	client      *resty.Client
+	ctx         context.Context
+	endTime     int64
+	poolName    string
+	shutdown    chan bool
+	wsconns     []wsclient.WSClient
+	wsReceivers []chan bool
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
-	var receiveChannelArray []chan bool
 
+	var wsReceivers []chan bool
 	for i := 0; i < config.Workers; i++ {
-		receiveChannelArray = append(receiveChannelArray, make(chan bool))
+		wsReceivers = append(wsReceivers, make(chan bool))
 	}
 
 	return &perfRunner{
-		bfr:      make(chan int, config.Workers),
-		cfg:      config,
-		ctx:      context.Background(),
-		endTime:  time.Now().Unix() + int64(config.Length.Seconds()),
-		poolName: poolName,
-		rcvBfr:   receiveChannelArray,
-		shutdown: make(chan bool),
-		wsconns:  make([]wsclient.WSClient, config.Workers),
+		bfr:         make(chan int, config.Workers),
+		cfg:         config,
+		ctx:         context.Background(),
+		endTime:     time.Now().Unix() + int64(config.Length.Seconds()),
+		poolName:    poolName,
+		shutdown:    make(chan bool),
+		wsconns:     make([]wsclient.WSClient, config.Workers),
+		wsReceivers: wsReceivers,
 	}
 }
 
@@ -76,16 +76,17 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
+	tokenCmdRan := false
 	for id := 0; id < pr.cfg.Workers; id++ {
-		err = pr.openWsClient(id)
+		ptr := id % len(pr.cfg.Cmds)
+
+		eventType := getEventFilter(id, pr.cfg.Cmds[ptr])
+		err = pr.openWsClient(id, eventType)
 		if err != nil {
 			return err
 		}
 
 		go pr.eventLoop(id)
-
-		ptr := id % len(pr.cfg.Cmds)
-
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdGetTransactions:
 			pr.wsconns[id].Close()
@@ -95,11 +96,28 @@ func (pr *perfRunner) Start() (err error) {
 		case conf.PerfCmdPrivateMsg:
 			go pr.RunPrivateMessage(id)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint(id)
+			if !tokenCmdRan {
+				tokenCmdRan = true
+				go pr.RunTokenMint(id)
+			} else {
+				pr.wsconns[id].Close()
+			}
 		case conf.PerfCmdTokenTransfer:
-			go pr.RunTokenTransfer(id)
+			if !tokenCmdRan {
+				tokenCmdRan = true
+				pr.MintTokensForTransfer("transfer")
+				go pr.RunTokenTransfer(id)
+			} else {
+				pr.wsconns[id].Close()
+			}
 		case conf.PerfCmdTokenBurn:
-			go pr.RunTokenBurn(id)
+			if !tokenCmdRan {
+				tokenCmdRan = true
+				pr.MintTokensForTransfer("burn")
+				go pr.RunTokenBurn(id)
+			} else {
+				pr.wsconns[id].Close()
+			}
 		}
 	}
 
@@ -114,7 +132,7 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) openWsClient(idx int) (err error) {
+func (pr *perfRunner) openWsClient(idx int, eventFilter fftypes.SubscriptionFilter) (err error) {
 	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
 	pr.wsconns[idx], err = wsclient.New(pr.ctx, wsConfig, nil)
 	if err != nil {
@@ -130,9 +148,7 @@ func (pr *perfRunner) openWsClient(idx int) (err error) {
 		AutoAck:   &autoack,
 		Ephemeral: true,
 		Namespace: "default",
-		Filter: fftypes.SubscriptionFilter{
-			Tag: strconv.Itoa(idx),
-		},
+		Filter:    eventFilter,
 	}
 	start, _ := json.Marshal(startPayload)
 
@@ -147,14 +163,13 @@ func (pr *perfRunner) openWsClient(idx int) (err error) {
 }
 
 func (pr *perfRunner) eventLoop(id int) {
-	// if confirmTransactions {
 	counter := 0
-
 	for {
 		select {
 		case msgBytes, ok := <-pr.wsconns[id].Receive():
 			if !ok {
 				log.Errorf("Error receiving websocket")
+				return
 			}
 
 			var event fftypes.EventDelivery
@@ -163,27 +178,29 @@ func (pr *perfRunner) eventLoop(id int) {
 			counter++
 			if counter == pr.cfg.Frequency {
 				counter = 0
-				pr.rcvBfr[id] <- true
+				pr.wsReceivers[id] <- true
 			}
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
+			return
 		}
 	}
-	// }
 }
 
-func (pr *perfRunner) runAttacker(rate vegeta.Rate, targeter vegeta.Targeter, attacker vegeta.Attacker, id int) error {
+func (pr *perfRunner) runAttacker(targeter vegeta.Targeter, id int, action string) error {
+	rate := vegeta.Rate{Freq: pr.cfg.Frequency, Per: time.Second}
+	attacker := vegeta.NewAttacker()
 	for {
 		select {
 		case <-pr.bfr:
-			log.Infof("%d --> Running", id)
+			log.Infof("%d --> Running %s", id, action)
 			var metrics vegeta.Metrics
 			for res := range attacker.Attack(targeter, rate, pr.cfg.JobDuration, "FF") {
 				metrics.Add(res)
 			}
 			metrics.Close()
-			<-pr.rcvBfr[id]
-			log.Infof("%d <-- Finished", id)
+			<-pr.wsReceivers[id]
+			log.Infof("%d <-- Finished %s", id, action)
 		case <-pr.shutdown:
 			return nil
 		}
@@ -224,4 +241,20 @@ func getFFClient(node string) *resty.Client {
 	client.SetHostURL(node)
 
 	return client
+}
+
+func getEventFilter(id int, cmd fftypes.FFEnum) fftypes.SubscriptionFilter {
+	switch cmd {
+	case conf.PerfCmdBroadcast, conf.PerfCmdPrivateMsg:
+		return fftypes.SubscriptionFilter{
+			Tag:    strconv.Itoa(id),
+			Events: fftypes.EventTypeMessageConfirmed.String(),
+		}
+	case conf.PerfCmdTokenMint, conf.PerfCmdTokenTransfer, conf.PerfCmdTokenBurn:
+		return fftypes.SubscriptionFilter{
+			Events: fftypes.EventTypeTransferConfirmed.String(),
+		}
+	default:
+		return fftypes.SubscriptionFilter{}
+	}
 }

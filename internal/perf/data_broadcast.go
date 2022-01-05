@@ -2,26 +2,37 @@ package perf
 
 import (
 	"fmt"
-	"time"
 
-	vegeta "github.com/tsenart/vegeta/lib"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 )
 
 func (pr *perfRunner) RunBroadcast(id int) {
-	rate := vegeta.Rate{Freq: pr.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"data":[
 		   {
 			  "value":{
-				 "broadcastID":"%d"
+				 "broadcastID":"%s"
 			  }
 		   }
 		],
 		"header":{
 		   "tag":"%d"
 		}
-	 }`, id, id)
+	 }`, getMessageString(id, pr.cfg.MessageOptions.LongMessage), id)
 	targeter := pr.getApiTargeter("POST", "messages/broadcast", payload)
-	attacker := vegeta.NewAttacker()
-	pr.runAttacker(rate, targeter, *attacker, id)
+	pr.runAttacker(targeter, id, conf.PerfCmdBroadcast.String())
+}
+
+func getMessageString(id int, isLongMsg bool) string {
+	str := ""
+	if isLongMsg {
+		for i := 0; i < 100000; i++ {
+			str = fmt.Sprintf("%s%d", str, id)
+		}
+		return str
+	}
+	for i := 0; i < 1000; i++ {
+		str = fmt.Sprintf("%s%d", str, id)
+	}
+	return str
 }

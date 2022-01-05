@@ -1,14 +1,8 @@
 package perf
 
-import (
-	"time"
-
-	vegeta "github.com/tsenart/vegeta/lib"
-)
+import "github.com/hyperledger/firefly-perf-cli/internal/conf"
 
 func (pr *perfRunner) RunGetTransactions(id int) {
-	rate := vegeta.Rate{Freq: pr.cfg.Frequency, Per: time.Second}
 	targeter := pr.getApiTargeter("GET", "transactions", "")
-	attacker := vegeta.NewAttacker()
-	pr.runAttacker(rate, targeter, *attacker, id)
+	pr.runAttacker(targeter, id, conf.PerfCmdGetTransactions.String())
 }

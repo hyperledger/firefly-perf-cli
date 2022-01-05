@@ -1,14 +1,14 @@
 package perf
 
 import (
+	"errors"
 	"fmt"
-	"time"
 
-	vegeta "github.com/tsenart/vegeta/lib"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	log "github.com/sirupsen/logrus"
 )
 
 func (pr *perfRunner) RunTokenMint(id int) {
-	rate := vegeta.Rate{Freq: pr.cfg.Frequency, Per: time.Second}
 	payload := fmt.Sprintf(`{
 		"pool": "%s",
 		"amount": "10"
@@ -20,13 +20,31 @@ func (pr *perfRunner) RunTokenMint(id int) {
 			"message": {
 				"data": [
 					{
-						"value": "PerformanceTest-%d"
+						"value": "MintTokenPerformanceTest-%d"
 					}
 				]
 			}
 		}`, pr.poolName, id)
 	}
 	targeter := pr.getApiTargeter("POST", "tokens/mint", payload)
-	attacker := vegeta.NewAttacker()
-	pr.runAttacker(rate, targeter, *attacker, id)
+	pr.runAttacker(targeter, id, conf.PerfCmdTokenMint.String())
+}
+
+func (pr *perfRunner) MintTokensForTransfer(transferType string) error {
+	log.Infof("Minting tokens to %s", transferType)
+
+	body := map[string]interface{}{
+		"pool":   pr.poolName,
+		"amount": "1000000000000",
+	}
+
+	res, err := pr.client.R().
+		SetHeader("Request-Timeout", "15s").
+		SetBody(&body).
+		Post("/api/v1/namespaces/default/tokens/mint?confirm=true")
+
+	if err != nil || !res.IsSuccess() {
+		return errors.New(fmt.Sprintf("Failed to mint tokens for %s", transferType))
+	}
+	return nil
 }
