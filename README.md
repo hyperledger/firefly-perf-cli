@@ -33,3 +33,7 @@ Flags:
       --tokenType string       Token type [fungible nonfungible] (default "fungible")
   -w, --workers int            Number of workers at a time (default 1)
 ```
+
+## Architecture
+
+![Architecture](./images/architecture.png)
