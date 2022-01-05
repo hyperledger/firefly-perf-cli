@@ -9,8 +9,8 @@ FireFly Performance CLI is a HTTP load testing tool that leverages [Vegeta](http
 - [x] Mint Tokens (`POST /tokens/mint`)
 - [x] Transfer Tokens (`POST /tokens/transfer`)
 - [x] Burn Tokens (`POST /tokens/burn`)
-- [ ] Fungible vs. Non-Fungible Token Toggle
-- [ ] Mint/Transfer/Burn Token with message
+- [x] Fungible vs. Non-Fungible Token Toggle
+- [x] Mint/Transfer/Burn Token with message
 
 ## Run a test
 
@@ -23,14 +23,15 @@ Usage:
   ff-perf [flags]
 
 Flags:
-  -f, --frequency int          Requests Per Second (RPS) frequency (default 10)
+  -f, --frequency int          Requests Per Second (RPS) of each worker (default 10)
   -h, --help                   help for ff-perf
   -d, --jobDuration duration   Duration of each job done by worker (default 1m0s)
-  -l, --length duration        Length of test (default 1m0s)
-  -n, --node string            FireFly node endpoint (default "http://localhost:5000")
-  -r, --recipient string       Recipient for FF messages
+  -l, --length duration        Length of entire performance test (default 1m0s)
+      --longMessage            Include long string in message
+  -n, --node string            FireFly node endpoint to test (default "http://localhost:5000")
+  -r, --recipient string       Recipient for FireFly messages
       --tokenMessage           Attach message to token
-      --tokenType string       Token type [fungible nonfungible] (default "fungible")
+      --tokenType string       [fungible nonfungible] (default "fungible")
   -w, --workers int            Number of workers at a time (default 1)
 ```
 
