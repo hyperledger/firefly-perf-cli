@@ -22,12 +22,13 @@ import (
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
+	"github.com/hyperledger/firefly/pkg/fftypes"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-var perfRunner *perf.PerfRunner
-
+var perfRunner perf.PerfRunner
 var rootConfig conf.PerfConfig
 
 func GetFireflyAsciiArt() string {
@@ -47,15 +48,28 @@ var rootCmd = &cobra.Command{
 	Short: "A CLI tool to generate synthetic load against a FireFly node",
 	Long: GetFireflyAsciiArt() + `
 FireFly Performance CLI is a tool to generate synthetic load against a FireFly node.
-
-Powered by vegeta, ff-perf will used a configured RPS and duration to benchmark different functions of a FireFly Node.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		if rootConfig.Node == "" {
-			return errors.New("Must provide FireFly node endpoint")
+		rootConfig.WebSocket = conf.FireFlyWsConf{
+			APIEndpoint:            fmt.Sprintf("%s/api/v1", rootConfig.Node),
+			WSPath:                 "/ws",
+			ReadBufferSize:         16000,
+			WriteBufferSize:        16000,
+			InitialDelay:           250000000,
+			MaximumDelay:           30000000000,
+			InitialConnectAttempts: 5,
 		}
 
 		if perfRunner == nil {
+			err := validateCommands(args)
+			if err != nil {
+				return err
+			}
+			err = validateConfig(rootConfig)
+			if err != nil {
+				return err
+			}
+
 			perfRunner = perf.New(&rootConfig)
 		}
 
@@ -78,16 +92,54 @@ func init() {
 	viper.SetEnvPrefix("FP")
 	viper.AutomaticEnv()
 
-	rootCmd.Flags().DurationVarP(&rootConfig.Duration, "duration", "d", 60*time.Second, "Duration of test (seconds)")
-	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 50, "Requests Per Second (RPS) frequency")
-	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "", "FireFly node endpoint")
-	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FF messages")
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02T15:04:05.999"
+	log.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
+
+	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of entire performance test")
+	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
+	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")
+	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
+	rootCmd.Flags().BoolVar(&rootConfig.TokenOptions.AttachMessage, "tokenMessage", false, "Attach message to token")
+	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
+	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 }
 
 func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
+		log.Errorln(err)
 		return 1
 	}
 	return 0
+}
+
+func validateCommands(cmds []string) error {
+	cmdArr := []fftypes.FFEnum{}
+	cmdSet := make(map[fftypes.FFEnum]bool, 0)
+	for _, cmd := range cmds {
+		if val, ok := conf.ValidPerfCommands[cmd]; ok {
+			cmdSet[val] = true
+		} else {
+			return errors.New(fmt.Sprintf("Commands not valid. Choose from %v", conf.ValidCommandsString()))
+		}
+	}
+	for cmd := range cmdSet {
+		cmdArr = append(cmdArr, cmd)
+	}
+
+	if len(cmdArr) == 0 {
+		return errors.New(fmt.Sprintf("Must specify at least one command. Choose from %v", conf.ValidCommandsString()))
+	}
+	rootConfig.Cmds = cmdArr
+
+	return nil
+}
+
+func validateConfig(cfg conf.PerfConfig) error {
+	if cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
+		return errors.New(fmt.Sprintf("Invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
+	}
+
+	return nil
 }

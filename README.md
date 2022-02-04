@@ -1,20 +1,18 @@
 # FireFly Performance CLI
 
-FireFly Performance CLI is a HTTP load testing tool that leverages [Vegeta](https://github.com/tsenart/vegeta) to generate a constant request rate against a [FireFly](https://github.com/hyperledger/firefly) network and measure performance. This it to be confident [FireFly](https://github.com/hyperledger/firefly) can perform under normal conditions for an extended period of time.
+FireFly Performance CLI is a HTTP load testing tool that generates a constant request rate against a [FireFly](https://github.com/hyperledger/firefly) network and measure performance. This it to be confident [FireFly](https://github.com/hyperledger/firefly) can perform under normal conditions for an extended period of time.
 
 ## Items Subject to Testing
 
 - [x] Broadcasts (`POST /messages/broadcasts`)
 - [x] Private Messaging (`POST /messages/private`)
 - [x] Mint Tokens (`POST /tokens/mint`)
-- [x] Transfer Tokens (`POST /tokens/transfer`)
-- [x] Burn Tokens (`POST /tokens/burn`)
-- [ ] Fungible vs. Non-Fungible Token Toggle
-- [ ] Mint/Transfer/Burn Token with message
+- [x] Fungible vs. Non-Fungible Token Toggle
+- [x] Mint/Transfer/Burn Token with message
 
 ## Run a test
 
-`ff-perf -n http://localhost:5000`
+`ff-perf msg_broadcast -n http://localhost:5000`
 
 ## Options
 
@@ -22,15 +20,28 @@ FireFly Performance CLI is a HTTP load testing tool that leverages [Vegeta](http
 Usage:
   ff-perf [flags]
 
+Commands:
+  msg_broadcast, msg_private, token_mint
+
 Flags:
-  -d, --duration duration   Duration of test (seconds) (default 1m0s)
-  -f, --frequency int       Requests Per Second (RPS) frequency (default 50)
-  -h, --help                help for ff-perf
-  -j, --jobs int            Number of jobs to run (default 100)
-  -n, --node string         FireFly node endpoint
-  -r, --recipient string    Recipient for FF messages
-  -w, --workers int         Number of workers at a time (default 1)
+  -h, --help               help for ff-perf
+  -l, --length duration    Length of entire performance test (default 1m0s)
+      --longMessage        Include long string in message
+  -n, --node string        FireFly node endpoint to test (default "http://localhost:5000")
+  -r, --recipient string   Recipient for FireFly messages
+      --tokenMessage       Attach message to token
+      --tokenType string   [fungible nonfungible] (default "fungible")
+  -w, --workers int        Number of workers at a time (default 1)
 ```
+
+## Examples
+
+- 10 workers submit broadcast messages for 500 hours
+
+  - `ff-perf msg_broadcast -l 500h -w 10`
+
+- 75 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
+  - `ff-perf msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`
 
 ## Architecture
 
