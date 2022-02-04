@@ -76,7 +76,6 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
-	tokenCmdRan := false
 	for id := 0; id < pr.cfg.Workers; id++ {
 		ptr := id % len(pr.cfg.Cmds)
 
@@ -96,28 +95,7 @@ func (pr *perfRunner) Start() (err error) {
 		case conf.PerfCmdPrivateMsg:
 			go pr.RunPrivateMessage(id)
 		case conf.PerfCmdTokenMint:
-			if !tokenCmdRan {
-				tokenCmdRan = true
-				go pr.RunTokenMint(id)
-			} else {
-				pr.wsconns[id].Close()
-			}
-		case conf.PerfCmdTokenTransfer:
-			if !tokenCmdRan {
-				tokenCmdRan = true
-				pr.MintTokensForTransfer("transfer")
-				go pr.RunTokenTransfer(id)
-			} else {
-				pr.wsconns[id].Close()
-			}
-		case conf.PerfCmdTokenBurn:
-			if !tokenCmdRan {
-				tokenCmdRan = true
-				pr.MintTokensForTransfer("burn")
-				go pr.RunTokenBurn(id)
-			} else {
-				pr.wsconns[id].Close()
-			}
+			go pr.RunTokenMint(id)
 		}
 	}
 
@@ -157,7 +135,7 @@ func (pr *perfRunner) openWsClient(idx int, eventFilter fftypes.SubscriptionFilt
 		log.Errorf("Issuing sending FF event start: %s", err)
 		return err
 	}
-	log.Infof("Receiving Events for: %s\n", strconv.Itoa(idx))
+	log.Infof("Receiving Events for: %s", strconv.Itoa(idx))
 
 	return nil
 }
