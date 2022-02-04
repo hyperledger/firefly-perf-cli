@@ -48,8 +48,6 @@ var rootCmd = &cobra.Command{
 	Short: "A CLI tool to generate synthetic load against a FireFly node",
 	Long: GetFireflyAsciiArt() + `
 FireFly Performance CLI is a tool to generate synthetic load against a FireFly node.
-
-Powered by vegeta, ff-perf will use a configured RPS and duration to benchmark different functions of a FireFly Node.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		rootConfig.WebSocket = conf.FireFlyWsConf{
@@ -93,6 +91,11 @@ func run() error {
 func init() {
 	viper.SetEnvPrefix("FP")
 	viper.AutomaticEnv()
+
+	customFormatter := new(log.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02T15:04:05.999"
+	log.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
 
 	rootCmd.Flags().DurationVarP(&rootConfig.JobDuration, "jobDuration", "d", 60*time.Second, "Duration of each job done by worker")
 	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) of each worker")

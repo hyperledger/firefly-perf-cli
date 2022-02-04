@@ -19,8 +19,13 @@ func (pr *perfRunner) RunBroadcast(id int) {
 		   "tag":"%d"
 		}
 	 }`, getMessageString(id, pr.cfg.MessageOptions.LongMessage), id)
-	targeter := pr.getApiTargeter("POST", "messages/broadcast", payload)
-	pr.runAttacker(targeter, id, conf.PerfCmdBroadcast.String())
+	req := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody([]byte(payload))
+	pr.sendAndWait(req, "messages/broadcast", id, conf.PerfCmdBroadcast.String())
 }
 
 func getMessageString(id int, isLongMsg bool) string {

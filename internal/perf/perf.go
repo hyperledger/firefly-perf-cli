@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/hyperledger/firefly/pkg/fftypes"
 	"github.com/hyperledger/firefly/pkg/wsclient"
 	log "github.com/sirupsen/logrus"
-	vegeta "github.com/tsenart/vegeta/lib"
 )
 
 type PerfRunner interface {
@@ -25,8 +23,6 @@ type PerfRunner interface {
 	// Tokens
 	CreateTokenPool() error
 	RunTokenMint(id int)
-	RunTokenTransfer(id int)
-	RunTokenBurn(id int)
 }
 
 type perfRunner struct {
@@ -87,9 +83,6 @@ func (pr *perfRunner) Start() (err error) {
 
 		go pr.eventLoop(id)
 		switch pr.cfg.Cmds[ptr] {
-		case conf.PerfCmdGetTransactions:
-			pr.wsconns[id].Close()
-			go pr.RunGetTransactions(id)
 		case conf.PerfCmdBroadcast:
 			go pr.RunBroadcast(id)
 		case conf.PerfCmdPrivateMsg:
@@ -108,6 +101,40 @@ func (pr *perfRunner) Start() (err error) {
 	pr.shutdown <- true
 
 	return nil
+}
+
+func (pr *perfRunner) eventLoop(id int) {
+	log.Infof("Event loop for Worker #%d started\n", id)
+	for {
+		select {
+		case msgBytes, ok := <-pr.wsconns[id].Receive():
+			if !ok {
+				log.Errorf("Error receiving websocket")
+				return
+			}
+
+			var event fftypes.EventDelivery
+			json.Unmarshal(msgBytes, &event)
+			pr.wsReceivers[id] <- true
+		case <-pr.ctx.Done():
+			log.Errorf("Run loop exiting (context cancelled)")
+			return
+		}
+	}
+}
+
+func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action string) error {
+	for {
+		select {
+		case <-pr.bfr:
+			log.Infof("%d --> %s Running", id, action)
+			req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", pr.cfg.Node, ep))
+			<-pr.wsReceivers[id]
+			log.Infof("%d <-- %s Finished", id, action)
+		case <-pr.shutdown:
+			return nil
+		}
+	}
 }
 
 func (pr *perfRunner) openWsClient(idx int, eventFilter fftypes.SubscriptionFilter) (err error) {
@@ -140,74 +167,9 @@ func (pr *perfRunner) openWsClient(idx int, eventFilter fftypes.SubscriptionFilt
 	return nil
 }
 
-func (pr *perfRunner) eventLoop(id int) {
-	counter := 0
-	for {
-		select {
-		case msgBytes, ok := <-pr.wsconns[id].Receive():
-			if !ok {
-				log.Errorf("Error receiving websocket")
-				return
-			}
-
-			var event fftypes.EventDelivery
-			json.Unmarshal(msgBytes, &event)
-
-			counter++
-			if counter == pr.cfg.Frequency {
-				counter = 0
-				pr.wsReceivers[id] <- true
-			}
-		case <-pr.ctx.Done():
-			log.Errorf("Run loop exiting (context cancelled)")
-			return
-		}
-	}
-}
-
-func (pr *perfRunner) runAttacker(targeter vegeta.Targeter, id int, action string) error {
-	rate := vegeta.Rate{Freq: pr.cfg.Frequency, Per: time.Second}
-	attacker := vegeta.NewAttacker()
-	for {
-		select {
-		case <-pr.bfr:
-			log.Infof("%d --> Running %s", id, action)
-			var metrics vegeta.Metrics
-			for res := range attacker.Attack(targeter, rate, pr.cfg.JobDuration, "FF") {
-				metrics.Add(res)
-			}
-			metrics.Close()
-			<-pr.wsReceivers[id]
-			log.Infof("%d <-- Finished %s", id, action)
-		case <-pr.shutdown:
-			return nil
-		}
-	}
-}
-
-func (pr *perfRunner) getApiTargeter(method string, ep string, payload string) vegeta.Targeter {
-	return func(t *vegeta.Target) error {
-		if t == nil {
-			return vegeta.ErrNilTarget
-		}
-
-		t.Method = method
-		t.URL = fmt.Sprintf("%s/api/v1/namespaces/default/%s", pr.cfg.Node, ep)
-		t.Body = []byte(payload)
-		header := http.Header{}
-		header.Add("Accept", "application/json")
-		header.Add("Content-Type", "application/json")
-		t.Header = header
-
-		return nil
-	}
-}
-
 func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 	for _, cmd := range cmds {
-		if cmd == conf.PerfCmdTokenMint ||
-			cmd == conf.PerfCmdTokenTransfer ||
-			cmd == conf.PerfCmdTokenBurn {
+		if cmd == conf.PerfCmdTokenMint {
 			return true
 		}
 	}

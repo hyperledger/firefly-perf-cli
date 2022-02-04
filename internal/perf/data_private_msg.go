@@ -26,6 +26,11 @@ func (pr *perfRunner) RunPrivateMessage(id int) {
 			"tag":"%d"
 		}
 	}`, id, pr.cfg.Recipient, id)
-	targeter := pr.getApiTargeter("POST", "messages/private", payload)
-	pr.runAttacker(targeter, id, conf.PerfCmdPrivateMsg.String())
+	req := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody([]byte(payload))
+	pr.sendAndWait(req, "messages/private", id, conf.PerfCmdPrivateMsg.String())
 }
