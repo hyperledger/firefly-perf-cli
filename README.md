@@ -40,7 +40,7 @@ Flags:
 
   - `ff-perf msg_broadcast -l 500h -w 10`
 
-- 25 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
+- 75 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
   - `ff-perf msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`
 
 ## Architecture
