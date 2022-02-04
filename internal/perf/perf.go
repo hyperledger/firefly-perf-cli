@@ -115,6 +115,7 @@ func (pr *perfRunner) eventLoop(id int) {
 
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
+			log.Infof("Message: %s for Worker #%d confirmed\n", event.Message.Header.ID, id)
 			pr.wsReceivers[id] <- true
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")

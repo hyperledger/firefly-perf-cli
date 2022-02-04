@@ -1,6 +1,6 @@
 # FireFly Performance CLI
 
-FireFly Performance CLI is a HTTP load testing tool that leverages [Vegeta](https://github.com/tsenart/vegeta) to generate a constant request rate against a [FireFly](https://github.com/hyperledger/firefly) network and measure performance. This it to be confident [FireFly](https://github.com/hyperledger/firefly) can perform under normal conditions for an extended period of time.
+FireFly Performance CLI is a HTTP load testing tool that generates a constant request rate against a [FireFly](https://github.com/hyperledger/firefly) network and measure performance. This it to be confident [FireFly](https://github.com/hyperledger/firefly) can perform under normal conditions for an extended period of time.
 
 ## Items Subject to Testing
 

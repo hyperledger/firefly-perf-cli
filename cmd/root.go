@@ -97,8 +97,6 @@ func init() {
 	log.SetFormatter(customFormatter)
 	customFormatter.FullTimestamp = true
 
-	rootCmd.Flags().DurationVarP(&rootConfig.JobDuration, "jobDuration", "d", 60*time.Second, "Duration of each job done by worker")
-	rootCmd.Flags().IntVarP(&rootConfig.Frequency, "frequency", "f", 10, "Requests Per Second (RPS) of each worker")
 	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of entire performance test")
 	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")

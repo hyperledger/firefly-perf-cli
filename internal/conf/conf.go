@@ -26,8 +26,6 @@ type TokenOptions struct {
 
 type PerfConfig struct {
 	Cmds           []fftypes.FFEnum
-	Frequency      int
-	JobDuration    time.Duration
 	Length         time.Duration
 	MessageOptions MessageOptions
 	Node           string
