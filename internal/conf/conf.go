@@ -68,10 +68,6 @@ var (
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdTokenTransfer mints tokens in a token pool
-	PerfCmdTokenTransfer fftypes.FFEnum = "token_transfer"
-	// PerfCmdTokenBurn burns tokens in a token pool
-	PerfCmdTokenBurn fftypes.FFEnum = "token_burn"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
@@ -79,8 +75,6 @@ var ValidPerfCommands = map[string]fftypes.FFEnum{
 	PerfCmdBroadcast.String():       PerfCmdBroadcast,
 	PerfCmdPrivateMsg.String():      PerfCmdPrivateMsg,
 	PerfCmdTokenMint.String():       PerfCmdTokenMint,
-	PerfCmdTokenTransfer.String():   PerfCmdTokenTransfer,
-	PerfCmdTokenBurn.String():       PerfCmdTokenBurn,
 }
 
 func ValidCommandsString() []string {
