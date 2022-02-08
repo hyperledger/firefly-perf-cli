@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -14,6 +16,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var mutex = &sync.Mutex{}
 var NAMESPACE = "default"
 var TRANSPORT_TYPE = "websockets"
 
@@ -34,8 +37,10 @@ type perfRunner struct {
 	client      *resty.Client
 	ctx         context.Context
 	endTime     int64
+	msgTimeMap  map[string]time.Time
 	poolName    string
 	shutdown    chan bool
+	tagPrefix   string
 	wsconn      wsclient.WSClient
 	wsReceivers []chan bool
 	wsUUID      fftypes.UUID
@@ -56,6 +61,8 @@ func New(config *conf.PerfConfig) PerfRunner {
 		log.Error("Could not create websocket connection: %s", err)
 	}
 
+	wsUUID := *fftypes.NewUUID()
+
 	return &perfRunner{
 		bfr:         make(chan int, config.Workers),
 		cfg:         config,
@@ -63,9 +70,11 @@ func New(config *conf.PerfConfig) PerfRunner {
 		endTime:     time.Now().Unix() + int64(config.Length.Seconds()),
 		poolName:    poolName,
 		shutdown:    make(chan bool),
+		tagPrefix:   fmt.Sprintf("perf_%s", wsUUID.String()),
+		msgTimeMap:  make(map[string]time.Time),
 		wsconn:      wsconn,
 		wsReceivers: wsReceivers,
-		wsUUID:      *fftypes.NewUUID(),
+		wsUUID:      wsUUID,
 	}
 }
 
@@ -110,9 +119,14 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	i := 0
+	lastCheckedTime := time.Now()
 	for time.Now().Unix() < pr.endTime {
 		pr.bfr <- i
 		i++
+		if time.Since(lastCheckedTime).Seconds() > 60 {
+			pr.getDelinquentMsgs()
+			lastCheckedTime = time.Now()
+		}
 	}
 
 	pr.shutdown <- true
@@ -133,13 +147,14 @@ func (pr *perfRunner) eventLoop() (err error) {
 			// Handle websocket event
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
-			msgId, err := strconv.Atoi(event.Message.Header.Tag)
+			msgId, err := strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
 			if err != nil {
 				log.Errorf("Could not parse message tag: %s", err)
-				break
+				continue
 			}
 			// Ack websocket event
 			ack, _ := json.Marshal(map[string]string{"type": "ack", "topic": event.ID.String()})
+			pr.deleteMsgTime(event.Message.Header.ID.String())
 			log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", msgId, msgId, event.ID.String(), msgId, event.Message.Header.ID.String())
 			pr.wsconn.Send(pr.ctx, ack)
 			// Release worker so it can continue to its next task
@@ -163,6 +178,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 			// Parse response for logging purposes
 			var msgRes fftypes.Message
 			json.Unmarshal(res.Body(), &msgRes)
+			pr.updateMsgTime(msgRes.Header.ID.String())
 			log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
 			// Wait for worker to confirm the message before proceeding to next task
 			<-pr.wsReceivers[id]
@@ -177,12 +193,13 @@ func (pr *perfRunner) createSub() (err error) {
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			ID:        &pr.wsUUID,
-			Name:      fmt.Sprintf("perf_%s", pr.wsUUID.String()),
+			Name:      pr.tagPrefix,
 			Namespace: NAMESPACE,
 		},
 		Ephemeral: false,
 		Filter: fftypes.SubscriptionFilter{
 			Events: fftypes.EventTypeMessageConfirmed.String(),
+			Tag:    fmt.Sprintf("^%s_", pr.tagPrefix),
 		},
 		Transport: TRANSPORT_TYPE,
 	}
@@ -211,7 +228,7 @@ func (pr *perfRunner) openWsClient() (err error) {
 			Type: fftypes.WSClientActionStart,
 		},
 		AutoAck:   &autoack,
-		Name:      fmt.Sprintf("perf_%s", pr.wsUUID.String()),
+		Name:      pr.tagPrefix,
 		Namespace: "default",
 	}
 	start, _ := json.Marshal(startPayload)
@@ -239,4 +256,32 @@ func getFFClient(node string) *resty.Client {
 	client.SetHostURL(node)
 
 	return client
+}
+
+func (pr *perfRunner) getDelinquentMsgs() {
+	delinquentMsgs := make(map[string]time.Time)
+	for msgId, timeLastSeen := range pr.msgTimeMap {
+		if time.Since(timeLastSeen).Seconds() > 60 {
+			delinquentMsgs[msgId] = timeLastSeen
+		}
+	}
+	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
+	if err != nil {
+		log.Errorf("Error printing delinquent messages: %s", err)
+		return
+	}
+
+	log.Warnf("Delinquent Messages:\n%s", string(dw))
+}
+
+func (pr *perfRunner) updateMsgTime(msgId string) {
+	mutex.Lock()
+	pr.msgTimeMap[msgId] = time.Now()
+	mutex.Unlock()
+}
+
+func (pr *perfRunner) deleteMsgTime(msgId string) {
+	mutex.Lock()
+	delete(pr.msgTimeMap, msgId)
+	mutex.Unlock()
 }

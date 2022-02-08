@@ -20,9 +20,12 @@ func (pr *perfRunner) RunTokenMint(id int) {
 					{
 						"value": "MintTokenPerformanceTest-%d"
 					}
-				]
+				],
+				"header": {
+      		"tag": "%s",
+    		}
 			}
-		}`, pr.poolName, id)
+		}`, pr.poolName, id, fmt.Sprintf("%s_%d", pr.tagPrefix, id))
 	}
 	req := pr.client.R().
 		SetHeaders(map[string]string{

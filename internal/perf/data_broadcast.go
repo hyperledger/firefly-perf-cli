@@ -16,9 +16,9 @@ func (pr *perfRunner) RunBroadcast(id int) {
 		   }
 		],
 		"header":{
-		   "tag":"%d"
+		   "tag":"%s"
 		}
-	 }`, getMessageString(id, pr.cfg.MessageOptions.LongMessage), id)
+	 }`, getMessageString(id, pr.cfg.MessageOptions.LongMessage), fmt.Sprintf("%s_%d", pr.tagPrefix, id))
 	req := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
