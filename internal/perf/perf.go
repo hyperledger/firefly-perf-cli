@@ -94,11 +94,11 @@ func (pr *perfRunner) Start() (err error) {
 	if err != nil {
 		return err
 	}
+	go pr.eventLoop()
 
 	for id := 0; id < pr.cfg.Workers; id++ {
 		ptr := id % len(pr.cfg.Cmds)
 
-		go pr.eventLoop(id)
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdBroadcast:
 			go pr.RunBroadcast(id)
@@ -120,8 +120,8 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) eventLoop(id int) (err error) {
-	log.Infof("Event loop started for Worker #%d", id)
+func (pr *perfRunner) eventLoop() (err error) {
+	log.Infoln("Event loop started...")
 	for {
 		select {
 		// Wait to receive websocket event
@@ -136,7 +136,7 @@ func (pr *perfRunner) eventLoop(id int) (err error) {
 			msgId, err := strconv.Atoi(event.Message.Header.Tag)
 			if err != nil {
 				log.Errorf("Could not parse message tag: %s", err)
-				return err
+				break
 			}
 			// Ack websocket event
 			ack, _ := json.Marshal(map[string]string{"type": "ack", "topic": event.ID.String()})
