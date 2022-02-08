@@ -276,7 +276,9 @@ func (pr *perfRunner) getDelinquentMsgs() {
 
 func (pr *perfRunner) updateMsgTime(msgId string) {
 	mutex.Lock()
-	pr.msgTimeMap[msgId] = time.Now()
+	if len(msgId) > 0 {
+		pr.msgTimeMap[msgId] = time.Now()
+	}
 	mutex.Unlock()
 }
 
