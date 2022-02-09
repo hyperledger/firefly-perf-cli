@@ -248,6 +248,7 @@ func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

@@ -9,12 +9,6 @@ import (
 	"github.com/hyperledger/firefly/pkg/wsclient"
 )
 
-type FilteredResult struct {
-	Count int64       `json:"count"`
-	Items interface{} `json:"items"`
-	Total int64       `json:"total"`
-}
-
 type MessageOptions struct {
 	LongMessage bool
 }
@@ -60,8 +54,6 @@ func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
 }
 
 var (
-	// PerfCmdGetTransactions sends GET requests to /transactions
-	PerfCmdGetTransactions fftypes.FFEnum = "get_txs"
 	// PerfCmdBroadcast sends broadcast messages
 	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
 	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium
@@ -71,10 +63,9 @@ var (
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdGetTransactions.String(): PerfCmdGetTransactions,
-	PerfCmdBroadcast.String():       PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String():      PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():       PerfCmdTokenMint,
+	PerfCmdBroadcast.String():  PerfCmdBroadcast,
+	PerfCmdPrivateMsg.String(): PerfCmdPrivateMsg,
+	PerfCmdTokenMint.String():  PerfCmdTokenMint,
 }
 
 func ValidCommandsString() []string {
