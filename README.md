@@ -28,7 +28,6 @@ Flags:
       --longMessage        Include long string in message
   -n, --node string        FireFly node endpoint to test (default "http://localhost:5000")
   -r, --recipient string   Recipient for FireFly messages
-      --tokenMessage       Attach message to token
       --tokenType string   [fungible nonfungible] (default "fungible")
   -w, --workers int        Number of workers at a time (default 1)
 ```
