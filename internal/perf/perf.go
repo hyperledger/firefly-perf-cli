@@ -177,9 +177,18 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 			}
 			// Parse response for logging purposes
 			var msgRes fftypes.Message
-			json.Unmarshal(res.Body(), &msgRes)
-			pr.updateMsgTime(msgRes.Header.ID.String())
-			log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
+			var tokenRes fftypes.TokenTransfer
+
+			switch action {
+			case conf.PerfCmdBroadcast.String(), conf.PerfCmdPrivateMsg.String():
+				json.Unmarshal(res.Body(), &msgRes)
+				pr.updateMsgTime(msgRes.Header.ID.String())
+				log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
+			case conf.PerfCmdTokenMint.String():
+				json.Unmarshal(res.Body(), &tokenRes)
+				pr.updateMsgTime(tokenRes.LocalID.String())
+				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
+			}
 			// Wait for worker to confirm the message before proceeding to next task
 			<-pr.wsReceivers[id]
 			log.Infof("%d <-- %s Finished", id, action)
@@ -215,6 +224,8 @@ func (pr *perfRunner) createSub() (err error) {
 		log.Errorf("Could not create subscription: %s", err)
 		return err
 	}
+
+	log.Infof("Created subscription: %s", pr.wsUUID.String())
 
 	return nil
 }

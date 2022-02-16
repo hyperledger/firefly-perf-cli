@@ -14,7 +14,6 @@ type MessageOptions struct {
 }
 
 type TokenOptions struct {
-	AttachMessage bool
 	TokenType     string
 }
 
