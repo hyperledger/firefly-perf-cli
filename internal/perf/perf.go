@@ -265,18 +265,20 @@ func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 
 func getFFClient(node string) *resty.Client {
 	client := resty.New()
-	client.SetHostURL(node)
+	client.SetBaseURL(node)
 
 	return client
 }
 
 func (pr *perfRunner) getDelinquentMsgs() {
+	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
 	for msgId, timeLastSeen := range pr.msgTimeMap {
 		if time.Since(timeLastSeen).Seconds() > 60 {
 			delinquentMsgs[msgId] = timeLastSeen
 		}
 	}
+	mutex.Unlock()
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
 		log.Errorf("Error printing delinquent messages: %s", err)
