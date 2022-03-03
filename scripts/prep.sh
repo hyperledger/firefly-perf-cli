@@ -33,7 +33,7 @@ ff remove -f $1
 # Create new Firefly stack
 printf "${PURPLE}Creating FireFly Stack: $2...\n${NC}"
 ff init $2 2 --manifest ~/ff-perf-testing/firefly/manifest.json -t erc1155 -d postgres -b $3 --prometheus-enabled
-cat ~/.firefly/stacks/$2/docker-compose.yml | yq '                                                                                                                                       ok  04:46:51 PM
+cat ~/.firefly/stacks/$2/docker-compose.yml | yq '
   .services.firefly_core_0.logging.options.max-file = "250" |
   .services.firefly_core_0.logging.options.max-size = "500m"
   ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$2/docker-compose.yml
