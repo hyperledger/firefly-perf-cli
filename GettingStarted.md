@@ -19,12 +19,14 @@
 
 - Helper commands to make folder structure from above:
   ```bash
+  # From the firefly-perf-cli folder
   mkdir ~/ff-perf-testing
-  cd ~/ff-perf-testing
-  git clone git@github.com:hyperledger/firefly.git
-  git clone git@github.com:hyperledger/firefly-perf-cli.git
+  git clone git@github.com:hyperledger/firefly.git ~/ff-perf-testing/firefly
+  git clone git@github.com:hyperledger/firefly-perf-cli.git ~/ff-perf-testing/firefly-perf-cli
   cp scripts/getLogs.sh ~/ff-perf-testing/getLogs.sh
+  chmod +x ~/ff-perf-testing/getLogs.sh
   cp scripts/prep.sh ~/ff-perf-testing/prep.sh
+  chmod +x ~/ff-perf-testing/prep.sh
   ```
 
 ## Preparing Environment

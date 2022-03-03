@@ -49,6 +49,6 @@ printf "${PURPLE}Modify the command below and run...\n${NC}"
 printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint -l 500h -r \"$ORG_IDENTITY\" -w 100 &> ff-perf.log &${NC}\n"
 
 # Create markdown for Perf Test
-printf "${GREEN}*** Before Starting Test ***${NC}\n"
+printf "\n${GREEN}*** Before Starting Test ***${NC}\n"
 printf "${GREEN}*** Add the following entry to https://github.com/hyperledger/firefly/issues/519 ***${NC}\n"
 printf "\n| $(uuidgen) | $(TZ=\":US/Eastern\" date +%m/%d/%Y) | *Add Snapshot After Test* | $(TZ=\":US/Eastern\" date +%I:%M_%p) | *Add After Test* | *Add After Test* | $3 | *Add Num Broadcasts* | *Add Num Private* | *Add Num Minters* | *Add Num On-Chain* | *Add related Github Issue* | $(cd ~/ff-perf-testing/firefly;git rev-parse --short HEAD) | *Add After Test* | $(echo $(jq -r 'to_entries[] | "\(.key):\(.value .sha)"' ~/ff-perf-testing/firefly/manifest.json)// )|\n"
