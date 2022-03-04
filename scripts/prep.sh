@@ -42,7 +42,7 @@ printf "${PURPLE}Starting FireFly Stack: $2...\n${NC}"
 ff start $2
 
 # Get org identity
-ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].identity')
+ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
 cd ~/ff-perf-testing/firefly-perf-cli
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
