@@ -8,11 +8,10 @@ FireFly Performance CLI is a HTTP load testing tool that generates a constant re
 - [x] Private Messaging (`POST /messages/private`)
 - [x] Mint Tokens (`POST /tokens/mint`)
 - [x] Fungible vs. Non-Fungible Token Toggle
-- [x] Mint/Transfer/Burn Token with message
 
 ## Run a test
 
-`ff-perf msg_broadcast -n http://localhost:5000`
+`ff-perf msg_broadcast -l 24h -n http://localhost:5000`
 
 ## Options
 
@@ -29,7 +28,6 @@ Flags:
       --longMessage        Include long string in message
   -n, --node string        FireFly node endpoint to test (default "http://localhost:5000")
   -r, --recipient string   Recipient for FireFly messages
-      --tokenMessage       Attach message to token
       --tokenType string   [fungible nonfungible] (default "fungible")
   -w, --workers int        Number of workers at a time (default 1)
 ```
@@ -42,7 +40,3 @@ Flags:
 
 - 75 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
   - `ff-perf msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`
-
-## Architecture
-
-![Architecture](./images/architecture.png)

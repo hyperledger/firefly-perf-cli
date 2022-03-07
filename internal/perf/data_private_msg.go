@@ -23,9 +23,9 @@ func (pr *perfRunner) RunPrivateMessage(id int) {
 			]
 		},
 		"header":{
-			"tag":"%d"
+			"tag":"%s"
 		}
-	}`, id, pr.cfg.Recipient, id)
+	}`, id, pr.cfg.Recipient, fmt.Sprintf("%s_%d", pr.tagPrefix, id))
 	req := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",

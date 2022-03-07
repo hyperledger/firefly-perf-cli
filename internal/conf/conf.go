@@ -9,18 +9,11 @@ import (
 	"github.com/hyperledger/firefly/pkg/wsclient"
 )
 
-type FilteredResult struct {
-	Count int64       `json:"count"`
-	Items interface{} `json:"items"`
-	Total int64       `json:"total"`
-}
-
 type MessageOptions struct {
 	LongMessage bool
 }
 
 type TokenOptions struct {
-	AttachMessage bool
 	TokenType     string
 }
 
@@ -60,27 +53,18 @@ func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
 }
 
 var (
-	// PerfCmdGetTransactions sends GET requests to /transactions
-	PerfCmdGetTransactions fftypes.FFEnum = "get_txs"
 	// PerfCmdBroadcast sends broadcast messages
 	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
 	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdTokenTransfer mints tokens in a token pool
-	PerfCmdTokenTransfer fftypes.FFEnum = "token_transfer"
-	// PerfCmdTokenBurn burns tokens in a token pool
-	PerfCmdTokenBurn fftypes.FFEnum = "token_burn"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdGetTransactions.String(): PerfCmdGetTransactions,
-	PerfCmdBroadcast.String():       PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String():      PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():       PerfCmdTokenMint,
-	PerfCmdTokenTransfer.String():   PerfCmdTokenTransfer,
-	PerfCmdTokenBurn.String():       PerfCmdTokenBurn,
+	PerfCmdBroadcast.String():  PerfCmdBroadcast,
+	PerfCmdPrivateMsg.String(): PerfCmdPrivateMsg,
+	PerfCmdTokenMint.String():  PerfCmdTokenMint,
 }
 
 func ValidCommandsString() []string {

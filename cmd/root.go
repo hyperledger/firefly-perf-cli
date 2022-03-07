@@ -18,6 +18,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
@@ -92,16 +93,22 @@ func init() {
 	viper.SetEnvPrefix("FP")
 	viper.AutomaticEnv()
 
-	customFormatter := new(log.TextFormatter)
-	customFormatter.TimestampFormat = "2006-01-02T15:04:05.999"
-	log.SetFormatter(customFormatter)
-	customFormatter.FullTimestamp = true
+	logger := &log.Logger{
+		Out:   os.Stderr,
+		Level: log.DebugLevel,
+		Formatter: &log.TextFormatter{
+			DisableSorting:  false,
+			ForceColors:     true,
+			FullTimestamp:   true,
+			TimestampFormat: "2006-01-02T15:04:05.000",
+		},
+	}
+	log.SetFormatter(logger.Formatter)
 
 	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of entire performance test")
 	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
-	rootCmd.Flags().BoolVar(&rootConfig.TokenOptions.AttachMessage, "tokenMessage", false, "Attach message to token")
 	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 }

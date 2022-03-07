@@ -8,22 +8,20 @@ import (
 
 func (pr *perfRunner) RunTokenMint(id int) {
 	payload := fmt.Sprintf(`{
-		"pool": "%s",
-		"amount": "10"
-	}`, pr.poolName)
-	if pr.cfg.TokenOptions.AttachMessage {
-		payload = fmt.Sprintf(`{
 			"pool": "%s",
 			"amount": "10",
+			"to": "%s",
 			"message": {
 				"data": [
 					{
 						"value": "MintTokenPerformanceTest-%d"
 					}
-				]
+				],
+				"header": {
+					"tag": "%s"
+				}
 			}
-		}`, pr.poolName, id)
-	}
+		}`, pr.poolName, pr.cfg.Recipient, id, fmt.Sprintf("%s_%d", pr.tagPrefix, id))
 	req := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",

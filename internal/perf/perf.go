@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -13,6 +15,10 @@ import (
 	"github.com/hyperledger/firefly/pkg/wsclient"
 	log "github.com/sirupsen/logrus"
 )
+
+var mutex = &sync.Mutex{}
+var NAMESPACE = "default"
+var TRANSPORT_TYPE = "websockets"
 
 type PerfRunner interface {
 	Init() error
@@ -31,19 +37,31 @@ type perfRunner struct {
 	client      *resty.Client
 	ctx         context.Context
 	endTime     int64
+	msgTimeMap  map[string]time.Time
 	poolName    string
 	shutdown    chan bool
-	wsconns     []wsclient.WSClient
+	tagPrefix   string
+	wsconn      wsclient.WSClient
 	wsReceivers []chan bool
+	wsUUID      fftypes.UUID
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 
+	// Create channel based dispatch for workers
 	var wsReceivers []chan bool
 	for i := 0; i < config.Workers; i++ {
 		wsReceivers = append(wsReceivers, make(chan bool))
 	}
+	// Create websocket client
+	wsConfig := conf.GenerateWSConfig(&config.WebSocket)
+	wsconn, err := wsclient.New(context.Background(), wsConfig, nil)
+	if err != nil {
+		log.Error("Could not create websocket connection: %s", err)
+	}
+
+	wsUUID := *fftypes.NewUUID()
 
 	return &perfRunner{
 		bfr:         make(chan int, config.Workers),
@@ -52,8 +70,11 @@ func New(config *conf.PerfConfig) PerfRunner {
 		endTime:     time.Now().Unix() + int64(config.Length.Seconds()),
 		poolName:    poolName,
 		shutdown:    make(chan bool),
-		wsconns:     make([]wsclient.WSClient, config.Workers),
+		tagPrefix:   fmt.Sprintf("perf_%s", wsUUID.String()),
+		msgTimeMap:  make(map[string]time.Time),
+		wsconn:      wsconn,
 		wsReceivers: wsReceivers,
+		wsUUID:      wsUUID,
 	}
 }
 
@@ -72,16 +93,21 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
+	// Create single subscription for test
+	err = pr.createSub()
+	if err != nil {
+		return err
+	}
+	// Open websocket client for subscription
+	err = pr.openWsClient()
+	if err != nil {
+		return err
+	}
+	go pr.eventLoop()
+
 	for id := 0; id < pr.cfg.Workers; id++ {
 		ptr := id % len(pr.cfg.Cmds)
 
-		eventType := getEventFilter(id, pr.cfg.Cmds[ptr])
-		err = pr.openWsClient(id, eventType)
-		if err != nil {
-			return err
-		}
-
-		go pr.eventLoop(id)
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdBroadcast:
 			go pr.RunBroadcast(id)
@@ -93,9 +119,14 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	i := 0
+	lastCheckedTime := time.Now()
 	for time.Now().Unix() < pr.endTime {
 		pr.bfr <- i
 		i++
+		if time.Since(lastCheckedTime).Seconds() > 60 {
+			pr.getDelinquentMsgs()
+			lastCheckedTime = time.Now()
+		}
 	}
 
 	pr.shutdown <- true
@@ -103,20 +134,31 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) eventLoop(id int) {
-	log.Infof("Event loop for Worker #%d started\n", id)
+func (pr *perfRunner) eventLoop() (err error) {
+	log.Infoln("Event loop started...")
 	for {
 		select {
-		case msgBytes, ok := <-pr.wsconns[id].Receive():
+		// Wait to receive websocket event
+		case msgBytes, ok := <-pr.wsconn.Receive():
 			if !ok {
 				log.Errorf("Error receiving websocket")
 				return
 			}
-
+			// Handle websocket event
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
-			log.Infof("Message: %s for Worker #%d confirmed\n", event.Message.Header.ID, id)
-			pr.wsReceivers[id] <- true
+			msgId, err := strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
+			if err != nil {
+				log.Errorf("Could not parse message tag: %s", err)
+				continue
+			}
+			// Ack websocket event
+			ack, _ := json.Marshal(map[string]string{"type": "ack", "topic": event.ID.String()})
+			pr.deleteMsgTime(event.Message.Header.ID.String())
+			log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", msgId, msgId, event.ID.String(), msgId, event.Message.Header.ID.String())
+			pr.wsconn.Send(pr.ctx, ack)
+			// Release worker so it can continue to its next task
+			pr.wsReceivers[msgId] <- true
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
 			return
@@ -128,8 +170,26 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 	for {
 		select {
 		case <-pr.bfr:
-			log.Infof("%d --> %s Running", id, action)
-			req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", pr.cfg.Node, ep))
+			// Worker sends its task
+			res, err := req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", pr.cfg.Node, ep))
+			if err != nil {
+				log.Errorf("Error sending POST /%s: %s", ep, err)
+			}
+			// Parse response for logging purposes
+			var msgRes fftypes.Message
+			var tokenRes fftypes.TokenTransfer
+
+			switch action {
+			case conf.PerfCmdBroadcast.String(), conf.PerfCmdPrivateMsg.String():
+				json.Unmarshal(res.Body(), &msgRes)
+				pr.updateMsgTime(msgRes.Header.ID.String())
+				log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
+			case conf.PerfCmdTokenMint.String():
+				json.Unmarshal(res.Body(), &tokenRes)
+				pr.updateMsgTime(tokenRes.LocalID.String())
+				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
+			}
+			// Wait for worker to confirm the message before proceeding to next task
 			<-pr.wsReceivers[id]
 			log.Infof("%d <-- %s Finished", id, action)
 		case <-pr.shutdown:
@@ -138,32 +198,57 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 	}
 }
 
-func (pr *perfRunner) openWsClient(idx int, eventFilter fftypes.SubscriptionFilter) (err error) {
-	wsConfig := conf.GenerateWSConfig(&pr.cfg.WebSocket)
-	pr.wsconns[idx], err = wsclient.New(pr.ctx, wsConfig, nil)
+func (pr *perfRunner) createSub() (err error) {
+	subPayload := fftypes.Subscription{
+		SubscriptionRef: fftypes.SubscriptionRef{
+			ID:        &pr.wsUUID,
+			Name:      pr.tagPrefix,
+			Namespace: NAMESPACE,
+		},
+		Ephemeral: false,
+		Filter: fftypes.SubscriptionFilter{
+			Events: fftypes.EventTypeMessageConfirmed.String(),
+			Tag:    fmt.Sprintf("^%s_", pr.tagPrefix),
+		},
+		Transport: TRANSPORT_TYPE,
+	}
+
+	_, err = pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", pr.cfg.Node))
 	if err != nil {
+		log.Errorf("Could not create subscription: %s", err)
 		return err
 	}
-	pr.wsconns[idx].Connect()
 
-	var autoack = true
+	log.Infof("Created subscription: %s", pr.wsUUID.String())
+
+	return nil
+}
+
+func (pr *perfRunner) openWsClient() (err error) {
+	pr.wsconn.Connect()
+
+	var autoack = false
 	startPayload := fftypes.WSClientActionStartPayload{
 		WSClientActionBase: fftypes.WSClientActionBase{
 			Type: fftypes.WSClientActionStart,
 		},
 		AutoAck:   &autoack,
-		Ephemeral: true,
+		Name:      pr.tagPrefix,
 		Namespace: "default",
-		Filter:    eventFilter,
 	}
 	start, _ := json.Marshal(startPayload)
-
-	err = pr.wsconns[idx].Send(context.Background(), start)
+	err = pr.wsconn.Send(pr.ctx, start)
 	if err != nil {
-		log.Errorf("Issuing sending FF event start: %s", err)
+		log.Errorf("Issuing opening websocket client: %s", err)
 		return err
 	}
-	log.Infof("Receiving Events for: %s", strconv.Itoa(idx))
+	log.Infof("Receiving Events...")
 
 	return nil
 }
@@ -174,28 +259,45 @@ func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 			return true
 		}
 	}
+
 	return false
 }
 
 func getFFClient(node string) *resty.Client {
 	client := resty.New()
-	client.SetHostURL(node)
+	client.SetBaseURL(node)
 
 	return client
 }
 
-func getEventFilter(id int, cmd fftypes.FFEnum) fftypes.SubscriptionFilter {
-	switch cmd {
-	case conf.PerfCmdBroadcast, conf.PerfCmdPrivateMsg:
-		return fftypes.SubscriptionFilter{
-			Tag:    strconv.Itoa(id),
-			Events: fftypes.EventTypeMessageConfirmed.String(),
+func (pr *perfRunner) getDelinquentMsgs() {
+	mutex.Lock()
+	delinquentMsgs := make(map[string]time.Time)
+	for msgId, timeLastSeen := range pr.msgTimeMap {
+		if time.Since(timeLastSeen).Seconds() > 60 {
+			delinquentMsgs[msgId] = timeLastSeen
 		}
-	case conf.PerfCmdTokenMint, conf.PerfCmdTokenTransfer, conf.PerfCmdTokenBurn:
-		return fftypes.SubscriptionFilter{
-			Events: fftypes.EventTypeTransferConfirmed.String(),
-		}
-	default:
-		return fftypes.SubscriptionFilter{}
 	}
+	mutex.Unlock()
+	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
+	if err != nil {
+		log.Errorf("Error printing delinquent messages: %s", err)
+		return
+	}
+
+	log.Warnf("Delinquent Messages:\n%s", string(dw))
+}
+
+func (pr *perfRunner) updateMsgTime(msgId string) {
+	mutex.Lock()
+	if len(msgId) > 0 {
+		pr.msgTimeMap[msgId] = time.Now()
+	}
+	mutex.Unlock()
+}
+
+func (pr *perfRunner) deleteMsgTime(msgId string) {
+	mutex.Lock()
+	delete(pr.msgTimeMap, msgId)
+	mutex.Unlock()
 }
