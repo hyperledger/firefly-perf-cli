@@ -159,28 +159,25 @@ func (pr *perfRunner) eventLoop() (err error) {
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
 
-			// TODO: NEED TO TEST THIS STUFF
+			var workerId int
 
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
-				index, err := pr.GetBlockchainEventValue(event.Reference.String())
+				workerId, err = pr.GetBlockchainEventValue(event.Reference.String())
 				if err != nil {
 					log.Errorf("Could not get blockchain event for: %s", event.Reference)
 					continue
 				} else {
-					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", index, index, event.ID.String(), index, event.Reference)
-					pr.wsReceivers[index] <- true
+					log.Infof("\n\t%d - Received \n\t%d --- Worker ID: %s\n\t%d --- Ref: %s", workerId, workerId, event.ID.String(), workerId, event.Reference)
 				}
 			default:
-				msgId, err := strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
+				workerId, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
 				if err != nil {
 					log.Errorf("Could not parse message tag: %s", err)
 					continue
 				}
 				pr.deleteMsgTime(event.Message.Header.ID.String())
-				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", msgId, msgId, event.ID.String(), msgId, event.Message.Header.ID.String())
-				// Release worker so it can continue to its next task
-				pr.wsReceivers[msgId] <- true
+				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerId, workerId, event.ID.String(), workerId, event.Message.Header.ID.String())
 			}
 
 			// Ack websocket event
@@ -195,6 +192,8 @@ func (pr *perfRunner) eventLoop() (err error) {
 			}
 			ackJSON, _ := json.Marshal(ack)
 			pr.wsconn.Send(pr.ctx, ackJSON)
+			// Release worker so it can continue to its next task
+			pr.wsReceivers[workerId] <- true
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
 			return
