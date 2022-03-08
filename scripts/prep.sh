@@ -14,6 +14,7 @@ fi
 # Kill existing ff-perf processes
 printf "${PURPLE}Killing ff-perf processes...\n${NC}"
 pkill -f 'ff-perf'
+rm ~/ff-perf-testing/ff-perf.log
 
 # Install local ff-perf-cli
 printf "${PURPLE}Installing local ff-perf-cli...\n${NC}"
@@ -44,13 +45,13 @@ ff start $2
 # Get org identity
 ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
 ORG_ADDRESS=$(cat ~/.firefly/stacks/$2/stack.json | jq -r '.members[0].address')
-cd ~/ff-perf-testing/firefly-perf-cli
+cd ~/ff-perf-testing
 
 printf "Deploying custom test contract..."
-ff deploy $2 ../firefly/test/data/simplestorage/simple_storage.json
+ff deploy $2 ./firefly/test/data/simplestorage/simple_storage.json
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
-printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint -l 500h -r \"$ORG_IDENTITY\" -w 100 &> ff-perf.log &${NC}\n"
+printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 &> ff-perf.log &${NC}\n"
 
 # Create markdown for Perf Test
 printf "\n${GREEN}*** Before Starting Test ***${NC}\n"

@@ -21,7 +21,7 @@ func (pr *perfRunner) RunTokenMint(id int) {
 					"tag": "%s"
 				}
 			}
-		}`, pr.poolName, pr.cfg.Recipient, id, fmt.Sprintf("%s_%d", pr.tagPrefix, id))
+		}`, pr.poolName, pr.cfg.RecipientAddress, id, fmt.Sprintf("%s_%d", pr.tagPrefix, id))
 	req := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",

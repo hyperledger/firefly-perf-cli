@@ -22,15 +22,16 @@ type ContractOptions struct {
 }
 
 type PerfConfig struct {
-	Cmds            []fftypes.FFEnum
-	Length          time.Duration
-	MessageOptions  MessageOptions
-	Node            string
-	Recipient       string
-	TokenOptions    TokenOptions
-	ContractOptions ContractOptions
-	WebSocket       FireFlyWsConf
-	Workers         int
+	Cmds             []fftypes.FFEnum
+	Length           time.Duration
+	MessageOptions   MessageOptions
+	Node             string
+	Recipient        string
+	RecipientAddress string
+	TokenOptions     TokenOptions
+	ContractOptions  ContractOptions
+	WebSocket        FireFlyWsConf
+	Workers          int
 }
 
 type FireFlyWsConf struct {
