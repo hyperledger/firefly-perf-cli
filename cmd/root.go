@@ -111,6 +111,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
 	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
+	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Address, "address", "a", "", "Address of custom contract")
 }
 
 func Execute() int {

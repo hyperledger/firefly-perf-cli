@@ -43,7 +43,11 @@ ff start $2
 
 # Get org identity
 ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
+ORG_ADDRESS=$(cat ~/.firefly/stacks/$2/stack.json | jq -r '.members[0].address')
 cd ~/ff-perf-testing/firefly-perf-cli
+
+printf "Deploying custom test contract..."
+ff deploy $2 ../firefly/test/data/simplestorage/simple_storage.json
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
 printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint -l 500h -r \"$ORG_IDENTITY\" -w 100 &> ff-perf.log &${NC}\n"

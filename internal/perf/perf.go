@@ -56,7 +56,7 @@ func New(config *conf.PerfConfig) PerfRunner {
 	}
 	// Create websocket client
 	wsConfig := conf.GenerateWSConfig(&config.WebSocket)
-	wsconn, err := wsclient.New(context.Background(), wsConfig, nil)
+	wsconn, err := wsclient.New(context.Background(), wsConfig, nil, nil)
 	if err != nil {
 		log.Error("Could not create websocket connection: %s", err)
 	}
@@ -98,6 +98,15 @@ func (pr *perfRunner) Start() (err error) {
 	if err != nil {
 		return err
 	}
+	err = pr.createContractsSub()
+	if err != nil {
+		return err
+	}
+	_, err = pr.createContractListener()
+	if err != nil {
+		return err
+	}
+
 	// Open websocket client for subscription
 	err = pr.openWsClient()
 	if err != nil {
@@ -115,6 +124,8 @@ func (pr *perfRunner) Start() (err error) {
 			go pr.RunPrivateMessage(id)
 		case conf.PerfCmdTokenMint:
 			go pr.RunTokenMint(id)
+		case conf.PerfCmdCustomContract:
+			go pr.RunCustomContract(id)
 		}
 	}
 
@@ -147,18 +158,42 @@ func (pr *perfRunner) eventLoop() (err error) {
 			// Handle websocket event
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
-			msgId, err := strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
-			if err != nil {
-				log.Errorf("Could not parse message tag: %s", err)
-				continue
+
+			var workerId int
+
+			switch event.Type {
+			case fftypes.EventTypeBlockchainEventReceived:
+				workerId, err = pr.GetBlockchainEventValue(event.Reference.String())
+				if err != nil {
+					log.Errorf("Could not get blockchain event for: %s", event.Reference)
+					continue
+				} else {
+					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerId, workerId, event.ID.String(), workerId, event.Reference)
+				}
+			default:
+				workerId, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
+				if err != nil {
+					log.Errorf("Could not parse message tag: %s", err)
+					continue
+				}
+				pr.deleteMsgTime(event.Message.Header.ID.String())
+				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerId, workerId, event.ID.String(), workerId, event.Message.Header.ID.String())
 			}
+
 			// Ack websocket event
-			ack, _ := json.Marshal(map[string]string{"type": "ack", "topic": event.ID.String()})
-			pr.deleteMsgTime(event.Message.Header.ID.String())
-			log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", msgId, msgId, event.ID.String(), msgId, event.Message.Header.ID.String())
-			pr.wsconn.Send(pr.ctx, ack)
+			ack := &fftypes.WSClientActionAckPayload{
+				WSClientActionBase: fftypes.WSClientActionBase{
+					Type: fftypes.WSClientActionAck,
+				},
+				ID: event.ID,
+				Subscription: &fftypes.SubscriptionRef{
+					ID: event.Subscription.ID,
+				},
+			}
+			ackJSON, _ := json.Marshal(ack)
+			pr.wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
-			pr.wsReceivers[msgId] <- true
+			pr.wsReceivers[workerId] <- true
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
 			return
@@ -178,6 +213,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 			// Parse response for logging purposes
 			var msgRes fftypes.Message
 			var tokenRes fftypes.TokenTransfer
+			var contractRes fftypes.ContractCallResponse
 
 			switch action {
 			case conf.PerfCmdBroadcast.String(), conf.PerfCmdPrivateMsg.String():
@@ -188,6 +224,9 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 				json.Unmarshal(res.Body(), &tokenRes)
 				pr.updateMsgTime(tokenRes.LocalID.String())
 				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
+			case conf.PerfCmdCustomContract.String():
+				json.Unmarshal(res.Body(), &contractRes)
+				log.Infof("%d --> Invoked contract", id)
 			}
 			// Wait for worker to confirm the message before proceeding to next task
 			<-pr.wsReceivers[id]
@@ -232,14 +271,23 @@ func (pr *perfRunner) createSub() (err error) {
 
 func (pr *perfRunner) openWsClient() (err error) {
 	pr.wsconn.Connect()
+	if err := pr.startSubscription(pr.tagPrefix); err != nil {
+		return err
+	}
+	if err := pr.startSubscription(fmt.Sprintf("%s_contracts", pr.tagPrefix)); err != nil {
+		return err
+	}
+	return nil
+}
 
+func (pr *perfRunner) startSubscription(name string) (err error) {
 	var autoack = false
 	startPayload := fftypes.WSClientActionStartPayload{
 		WSClientActionBase: fftypes.WSClientActionBase{
 			Type: fftypes.WSClientActionStart,
 		},
 		AutoAck:   &autoack,
-		Name:      pr.tagPrefix,
+		Name:      name,
 		Namespace: "default",
 	}
 	start, _ := json.Marshal(startPayload)
@@ -248,8 +296,7 @@ func (pr *perfRunner) openWsClient() (err error) {
 		log.Errorf("Issuing opening websocket client: %s", err)
 		return err
 	}
-	log.Infof("Receiving Events...")
-
+	log.Infof(`Receiving Events on subscription: "%s"`, name)
 	return nil
 }
 
@@ -300,4 +347,88 @@ func (pr *perfRunner) deleteMsgTime(msgId string) {
 	mutex.Lock()
 	delete(pr.msgTimeMap, msgId)
 	mutex.Unlock()
+}
+
+func (pr *perfRunner) createContractListener() (string, error) {
+	subPayload := fmt.Sprintf(`{
+		"location": {
+			"address": "%s"
+		},
+		"event": {
+			"name": "Changed",
+			"description": "",
+			"params": [
+				{
+					"name": "from",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address",
+							"internalType": "address",
+							"indexed": true
+						}
+					}
+				},
+				{
+					"name": "value",
+					"schema": {
+						"type": "integer",
+						"details": {
+							"type": "uint256",
+							"internalType": "uint256"
+						}
+					}
+				}
+			]
+		}
+	}`, pr.cfg.ContractOptions.Address)
+
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/contracts/listeners", pr.cfg.Node))
+	if err != nil {
+		return "", err
+	}
+	var responseBody map[string]interface{}
+	err = json.Unmarshal(res.Body(), &responseBody)
+	if err != nil {
+		return "", err
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Created contract listener: %s", id)
+	return id, nil
+}
+
+func (pr *perfRunner) createContractsSub() (err error) {
+	subPayload := fftypes.Subscription{
+		SubscriptionRef: fftypes.SubscriptionRef{
+			Name:      fmt.Sprintf("%s_contracts", pr.tagPrefix),
+			Namespace: NAMESPACE,
+		},
+		Ephemeral: false,
+		Filter: fftypes.SubscriptionFilter{
+			Events: fftypes.EventTypeBlockchainEventReceived.String(),
+		},
+		Transport: TRANSPORT_TYPE,
+	}
+
+	_, err = pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", pr.cfg.Node))
+	if err != nil {
+		log.Errorf("Could not create subscription: %s", err)
+		return err
+	}
+
+	log.Infof("Created subscription: %s", pr.wsUUID.String())
+
+	return nil
 }

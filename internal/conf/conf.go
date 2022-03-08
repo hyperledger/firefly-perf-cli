@@ -14,18 +14,23 @@ type MessageOptions struct {
 }
 
 type TokenOptions struct {
-	TokenType     string
+	TokenType string
+}
+
+type ContractOptions struct {
+	Address string
 }
 
 type PerfConfig struct {
-	Cmds           []fftypes.FFEnum
-	Length         time.Duration
-	MessageOptions MessageOptions
-	Node           string
-	Recipient      string
-	TokenOptions   TokenOptions
-	WebSocket      FireFlyWsConf
-	Workers        int
+	Cmds            []fftypes.FFEnum
+	Length          time.Duration
+	MessageOptions  MessageOptions
+	Node            string
+	Recipient       string
+	TokenOptions    TokenOptions
+	ContractOptions ContractOptions
+	WebSocket       FireFlyWsConf
+	Workers         int
 }
 
 type FireFlyWsConf struct {
@@ -59,12 +64,15 @@ var (
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
+	// PerfCmdCustomContract invokes and queries a custom smart contract
+	PerfCmdCustomContract fftypes.FFEnum = "custom_contract"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdBroadcast.String():  PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String(): PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():  PerfCmdTokenMint,
+	PerfCmdBroadcast.String():      PerfCmdBroadcast,
+	PerfCmdPrivateMsg.String():     PerfCmdPrivateMsg,
+	PerfCmdTokenMint.String():      PerfCmdTokenMint,
+	PerfCmdCustomContract.String(): PerfCmdCustomContract,
 }
 
 func ValidCommandsString() []string {
