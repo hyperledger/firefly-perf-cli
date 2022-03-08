@@ -168,7 +168,7 @@ func (pr *perfRunner) eventLoop() (err error) {
 					log.Errorf("Could not get blockchain event for: %s", event.Reference)
 					continue
 				} else {
-					log.Infof("\n\t%d - Received \n\t%d --- Worker ID: %s\n\t%d --- Ref: %s", workerId, workerId, event.ID.String(), workerId, event.Reference)
+					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerId, workerId, event.ID.String(), workerId, event.Reference)
 				}
 			default:
 				workerId, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
