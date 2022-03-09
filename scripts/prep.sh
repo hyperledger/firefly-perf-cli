@@ -5,7 +5,7 @@ PURPLE='\033[0;35m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-BASE_PATH='~/ff-perf-testing'
+BASE_PATH=~/ff-perf-testing
 
 # Verify three arguments were given
 if [ $# -ne 3 ]; then
