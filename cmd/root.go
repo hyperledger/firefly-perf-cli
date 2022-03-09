@@ -109,6 +109,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
 	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
+	rootCmd.Flags().StringVarP(&rootConfig.RecipientAddress, "recipientAddress", "x", "", "Recipient address for FireFly transfers")
 	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Address, "address", "a", "", "Address of custom contract")

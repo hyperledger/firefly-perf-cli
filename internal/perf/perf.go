@@ -86,23 +86,26 @@ func (pr *perfRunner) Init() (err error) {
 
 func (pr *perfRunner) Start() (err error) {
 	// Create token pool, if needed
-	if containsTokenCmd(pr.cfg.Cmds) {
+	if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdTokenMint) {
 		err = pr.CreateTokenPool()
 		if err != nil {
 			return err
 		}
 	}
+	// Create contract sub and listener, if needed
+	if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomContract) {
+		err = pr.createContractsSub()
+		if err != nil {
+			return err
+		}
+		_, err = pr.createContractListener()
+		if err != nil {
+			return err
+		}
+	}
 
-	// Create single subscription for test
-	err = pr.createSub()
-	if err != nil {
-		return err
-	}
-	err = pr.createContractsSub()
-	if err != nil {
-		return err
-	}
-	_, err = pr.createContractListener()
+	// Create subscription for message confirmations
+	err = pr.createMsgConfirmSub()
 	if err != nil {
 		return err
 	}
@@ -237,7 +240,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 	}
 }
 
-func (pr *perfRunner) createSub() (err error) {
+func (pr *perfRunner) createMsgConfirmSub() (err error) {
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			ID:        &pr.wsUUID,
@@ -303,6 +306,16 @@ func (pr *perfRunner) startSubscription(name string) (err error) {
 func containsTokenCmd(cmds []fftypes.FFEnum) bool {
 	for _, cmd := range cmds {
 		if cmd == conf.PerfCmdTokenMint {
+			return true
+		}
+	}
+
+	return false
+}
+
+func containsTargetCmd(cmds []fftypes.FFEnum, target fftypes.FFEnum) bool {
+	for _, cmd := range cmds {
+		if cmd == target {
 			return true
 		}
 	}
