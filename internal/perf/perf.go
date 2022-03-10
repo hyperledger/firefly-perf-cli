@@ -166,7 +166,7 @@ func (pr *perfRunner) eventLoop() (err error) {
 
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
-				workerId, err = pr.GetBlockchainEventValue(event.Reference.String())
+				workerId, err = pr.GetBlockchainEventValue(pr.cfg.Node, event.Reference.String())
 				if err != nil {
 					log.Errorf("Could not get blockchain event for: %s", event.Reference)
 					continue
