@@ -25,13 +25,14 @@ type PerfConfig struct {
 	Cmds             []fftypes.FFEnum
 	Length           time.Duration
 	MessageOptions   MessageOptions
-	Node             string
 	Recipient        string
 	RecipientAddress string
 	TokenOptions     TokenOptions
 	ContractOptions  ContractOptions
 	WebSocket        FireFlyWsConf
 	Workers          int
+	NodeURLs         []string
+	StackJSONPath    string
 }
 
 type FireFlyWsConf struct {
@@ -44,11 +45,11 @@ type FireFlyWsConf struct {
 	InitialConnectAttempts int           `mapstructure:"initialConnectAttempts"`
 }
 
-func GenerateWSConfig(conf *FireFlyWsConf) *wsclient.WSConfig {
+func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
 	t, _ := url.QueryUnescape(conf.WSPath)
 
 	return &wsclient.WSConfig{
-		HTTPURL:                conf.APIEndpoint,
+		HTTPURL:                nodeURL,
 		WSKeyPath:              t,
 		ReadBufferSize:         conf.ReadBufferSize,
 		WriteBufferSize:        conf.WriteBufferSize,

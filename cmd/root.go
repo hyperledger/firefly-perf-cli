@@ -16,13 +16,15 @@ limitations under the License.
 package cmd
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"time"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
+	"github.com/hyperledger/firefly-perf-cli/internal/types"
 	"github.com/hyperledger/firefly/pkg/fftypes"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -52,7 +54,6 @@ FireFly Performance CLI is a tool to generate synthetic load against a FireFly n
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		rootConfig.WebSocket = conf.FireFlyWsConf{
-			APIEndpoint:            fmt.Sprintf("%s/api/v1", rootConfig.Node),
 			WSPath:                 "/ws",
 			ReadBufferSize:         16000,
 			WriteBufferSize:        16000,
@@ -69,6 +70,19 @@ FireFly Performance CLI is a tool to generate synthetic load against a FireFly n
 			err = validateConfig(rootConfig)
 			if err != nil {
 				return err
+			}
+
+			if rootConfig.StackJSONPath == "" {
+				rootConfig.NodeURLs = []string{"http://localhost:5000"}
+			} else {
+				stack, err := readStackJSON(rootConfig.StackJSONPath)
+				if err != nil {
+					return err
+				}
+				rootConfig.NodeURLs = make([]string, len(stack.Members))
+				for i, member := range stack.Members {
+					rootConfig.NodeURLs[i] = fmt.Sprintf("http://localhost:%v", member.ExposedFireflyPort)
+				}
 			}
 
 			perfRunner = perf.New(&rootConfig)
@@ -107,12 +121,12 @@ func init() {
 
 	rootCmd.Flags().DurationVarP(&rootConfig.Length, "length", "l", 60*time.Second, "Length of entire performance test")
 	rootCmd.Flags().BoolVar(&rootConfig.MessageOptions.LongMessage, "longMessage", false, "Include long string in message")
-	rootCmd.Flags().StringVarP(&rootConfig.Node, "node", "n", "http://localhost:5000", "FireFly node endpoint to test")
 	rootCmd.Flags().StringVarP(&rootConfig.Recipient, "recipient", "r", "", "Recipient for FireFly messages")
 	rootCmd.Flags().StringVarP(&rootConfig.RecipientAddress, "recipientAddress", "x", "", "Recipient address for FireFly transfers")
 	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Address, "address", "a", "", "Address of custom contract")
+	rootCmd.Flags().StringVarP(&rootConfig.StackJSONPath, "stackJSON", "s", "", "Path to stack.json file that describes the network to test")
 }
 
 func Execute() int {
@@ -130,7 +144,7 @@ func validateCommands(cmds []string) error {
 		if val, ok := conf.ValidPerfCommands[cmd]; ok {
 			cmdSet[val] = true
 		} else {
-			return errors.New(fmt.Sprintf("Commands not valid. Choose from %v", conf.ValidCommandsString()))
+			return fmt.Errorf("commands not valid. Choose from %v", conf.ValidCommandsString())
 		}
 	}
 	for cmd := range cmdSet {
@@ -138,7 +152,7 @@ func validateCommands(cmds []string) error {
 	}
 
 	if len(cmdArr) == 0 {
-		return errors.New(fmt.Sprintf("Must specify at least one command. Choose from %v", conf.ValidCommandsString()))
+		return fmt.Errorf("must specify at least one command. Choose from %v", conf.ValidCommandsString())
 	}
 	rootConfig.Cmds = cmdArr
 
@@ -147,8 +161,19 @@ func validateCommands(cmds []string) error {
 
 func validateConfig(cfg conf.PerfConfig) error {
 	if cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
-		return errors.New(fmt.Sprintf("Invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
+		return fmt.Errorf("invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String())
 	}
-
 	return nil
+}
+
+func readStackJSON(filename string) (*types.Stack, error) {
+	if d, err := ioutil.ReadFile(filename); err != nil {
+		return nil, err
+	} else {
+		var stack *types.Stack
+		if err := json.Unmarshal(d, &stack); err == nil {
+			fmt.Printf("done\n")
+		}
+		return stack, nil
+	}
 }

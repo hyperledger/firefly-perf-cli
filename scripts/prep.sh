@@ -50,10 +50,13 @@ ORG_ADDRESS=$(cat ~/.firefly/stacks/$2/stack.json | jq -r '.members[0].address')
 cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
-ff deploy $2 ./firefly/test/data/simplestorage/simple_storage.json
+
+prefix='contract address: '
+output=$(ff deploy $2 ./firefly/test/data/simplestorage/simple_storage.json | grep address)
+CONTRACT_ADDRESS=${output#"$prefix"}
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
-printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 &> ff-perf.log &${NC}\n"
+printf "${GREEN}nohup ff-perf msg_broadcast msg_private token_mint custom_contract -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -a $CONTRACT_ADDRESS -s ~/.firefly/stacks/$2/stack.json &> ff-perf.log &${NC}\n"
 
 # Create markdown for Perf Test
 printf "\n${RED}*** Before Starting Test ***${NC}\n"

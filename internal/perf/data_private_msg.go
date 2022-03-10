@@ -6,7 +6,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 )
 
-func (pr *perfRunner) RunPrivateMessage(id int) {
+func (pr *perfRunner) RunPrivateMessage(nodeURL string, id int) {
 	payload := fmt.Sprintf(`{
 		"data": [
 			{
@@ -32,5 +32,5 @@ func (pr *perfRunner) RunPrivateMessage(id int) {
 			"Content-Type": "application/json",
 		}).
 		SetBody([]byte(payload))
-	pr.sendAndWait(req, "messages/private", id, conf.PerfCmdPrivateMsg.String())
+	pr.sendAndWait(req, nodeURL, "messages/private", id, conf.PerfCmdPrivateMsg.String())
 }
