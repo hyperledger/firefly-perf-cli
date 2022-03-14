@@ -176,7 +176,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
 
-			var workerID int
+			var workerID int = -1
 
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
@@ -187,8 +187,9 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 				value := event.BlockchainEvent.Output.GetString("value")
 				workerID, err = strconv.Atoi(value)
 				if err != nil {
-					log.Error(err)
-					continue
+					log.Errorf("Could not parse event value: %s", err)
+					b, _ := json.Marshal(&event)
+					log.Infof("Full event: %s", b)
 				} else {
 					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, workerID, event.ID.String(), workerID, event.Reference)
 				}
@@ -196,7 +197,8 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 				workerID, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
 				if err != nil {
 					log.Errorf("Could not parse message tag: %s", err)
-					continue
+					b, _ := json.Marshal(&event)
+					log.Infof("Full event: %s", b)
 				}
 				pr.deleteMsgTime(event.Message.Header.ID.String())
 				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerID, workerID, event.ID.String(), workerID, event.Message.Header.ID.String())
@@ -215,7 +217,9 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			ackJSON, _ := json.Marshal(ack)
 			wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
-			pr.wsReceivers[workerID] <- true
+			if workerID > 0 {
+				pr.wsReceivers[workerID] <- true
+			}
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
 			return
@@ -262,7 +266,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 }
 
 func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
-	var readAhead uint16 = 50
+	var readAhead uint16 = uint16(len(pr.wsReceivers))
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			Name:      pr.tagPrefix,
