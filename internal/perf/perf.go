@@ -262,10 +262,16 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 }
 
 func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
+	var readAhead uint16 = 50
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			Name:      pr.tagPrefix,
 			Namespace: NAMESPACE,
+		},
+		Options: fftypes.SubscriptionOptions{
+			SubscriptionCoreOptions: fftypes.SubscriptionCoreOptions{
+				ReadAhead: &readAhead,
+			},
 		},
 		Ephemeral: false,
 		Filter: fftypes.SubscriptionFilter{
