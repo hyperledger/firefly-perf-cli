@@ -182,6 +182,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			case fftypes.EventTypeBlockchainEventReceived:
 				if event.BlockchainEvent == nil {
 					log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
+					return fmt.Errorf("blockchain event not found for event: %s", event.ID)
 				}
 				value := event.BlockchainEvent.Output.GetString("value")
 				workerID, err = strconv.Atoi(value)
