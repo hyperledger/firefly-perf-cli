@@ -94,11 +94,12 @@ func (pr *perfRunner) Start() (err error) {
 	}
 	// Create contract sub and listener, if needed
 	if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomContract) {
-		err = pr.createContractsSub()
+		listenerID, err := pr.createContractListener()
 		if err != nil {
 			return err
 		}
-		_, err = pr.createContractListener()
+
+		err = pr.createContractsSub(listenerID)
 		if err != nil {
 			return err
 		}
@@ -162,25 +163,30 @@ func (pr *perfRunner) eventLoop() (err error) {
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
 
-			var workerId int
+			var workerID int
 
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
-				workerId, err = pr.GetBlockchainEventValue(pr.cfg.Node, event.Reference.String())
+				if event.BlockchainEvent == nil {
+					log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
+					return fmt.Errorf("blockchain event not found for event: %s", event.ID)
+				}
+				value := event.BlockchainEvent.Output.GetString("value")
+				workerID, err = strconv.Atoi(value)
 				if err != nil {
-					log.Errorf("Could not get blockchain event for: %s", event.Reference)
+					log.Error(err)
 					continue
 				} else {
-					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerId, workerId, event.ID.String(), workerId, event.Reference)
+					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, workerID, event.ID.String(), workerID, event.Reference)
 				}
 			default:
-				workerId, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
+				workerID, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
 				if err != nil {
 					log.Errorf("Could not parse message tag: %s", err)
 					continue
 				}
 				pr.deleteMsgTime(event.Message.Header.ID.String())
-				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerId, workerId, event.ID.String(), workerId, event.Message.Header.ID.String())
+				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerID, workerID, event.ID.String(), workerID, event.Message.Header.ID.String())
 			}
 
 			// Ack websocket event
@@ -196,7 +202,7 @@ func (pr *perfRunner) eventLoop() (err error) {
 			ackJSON, _ := json.Marshal(ack)
 			pr.wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
-			pr.wsReceivers[workerId] <- true
+			pr.wsReceivers[workerID] <- true
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
 			return
@@ -229,7 +235,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
 			case conf.PerfCmdCustomContract.String():
 				json.Unmarshal(res.Body(), &contractRes)
-				log.Infof("%d --> Invoked contract", id)
+				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
 			}
 			// Wait for worker to confirm the message before proceeding to next task
 			<-pr.wsReceivers[id]
@@ -256,7 +262,9 @@ func (pr *perfRunner) createMsgConfirmSub() (err error) {
 		Ephemeral: false,
 		Filter: fftypes.SubscriptionFilter{
 			Events: fftypes.EventTypeMessageConfirmed.String(),
-			Tag:    fmt.Sprintf("^%s_", pr.tagPrefix),
+			Message: fftypes.MessageFilter{
+				Tag: fmt.Sprintf("^%s_", pr.tagPrefix),
+			},
 		},
 		Transport: TRANSPORT_TYPE,
 	}
@@ -307,16 +315,6 @@ func (pr *perfRunner) startSubscription(name string) (err error) {
 	}
 	log.Infof(`Receiving Events on subscription: "%s"`, name)
 	return nil
-}
-
-func containsTokenCmd(cmds []fftypes.FFEnum) bool {
-	for _, cmd := range cmds {
-		if cmd == conf.PerfCmdTokenMint {
-			return true
-		}
-	}
-
-	return false
 }
 
 func containsTargetCmd(cmds []fftypes.FFEnum, target fftypes.FFEnum) bool {
@@ -422,7 +420,7 @@ func (pr *perfRunner) createContractListener() (string, error) {
 	return id, nil
 }
 
-func (pr *perfRunner) createContractsSub() (err error) {
+func (pr *perfRunner) createContractsSub(listenerID string) (err error) {
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			Name:      fmt.Sprintf("%s_contracts", pr.tagPrefix),
@@ -431,6 +429,9 @@ func (pr *perfRunner) createContractsSub() (err error) {
 		Ephemeral: false,
 		Filter: fftypes.SubscriptionFilter{
 			Events: fftypes.EventTypeBlockchainEventReceived.String(),
+			BlockchainEvent: fftypes.BlockchainEventFilter{
+				Listener: listenerID,
+			},
 		},
 		Transport: TRANSPORT_TYPE,
 	}

@@ -695,6 +695,8 @@ github.com/hyperledger/firefly v0.13.1-0.20220223210721-50da615d12f2 h1:C9alzx0O
 github.com/hyperledger/firefly v0.13.1-0.20220223210721-50da615d12f2/go.mod h1:zWCscuKjUi67O6fVP7quiLXcOKzP047I+WfSTDd+ogI=
 github.com/hyperledger/firefly v0.13.2-0.20220304003606-9f9232905b74 h1:aJ8+Aj2oX7KWFlHQBbpPeSL8dosm1FhIHZhNtlSvYAw=
 github.com/hyperledger/firefly v0.13.2-0.20220304003606-9f9232905b74/go.mod h1:zWCscuKjUi67O6fVP7quiLXcOKzP047I+WfSTDd+ogI=
+github.com/hyperledger/firefly v0.13.2-0.20220309200214-d515f268aa6b h1:dCJQ4ecntpFxP7oty8NibV1zTPxoP991OVWCiLU8H7g=
+github.com/hyperledger/firefly v0.13.2-0.20220309200214-d515f268aa6b/go.mod h1:zWCscuKjUi67O6fVP7quiLXcOKzP047I+WfSTDd+ogI=
 github.com/hyperledger/firefly-cli v0.0.42 h1:YU7nFmbIAWUYmNLW5YJsqBvpvlS+85KXUNXYFJq3BT4=
 github.com/hyperledger/firefly-cli v0.0.42/go.mod h1:ig0mchIsgwreiL/QTwYR65xtvOa8PhnOarLj4tUf2Kc=
 github.com/iancoleman/strcase v0.2.0/go.mod h1:iwCmte+B7n89clKwxIoIXy/HfoL7AsD47ZCWhYzw7ho=

@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/go-resty/resty/v2 v2.7.0
-	github.com/hyperledger/firefly v0.13.2-0.20220304003606-9f9232905b74
+	github.com/hyperledger/firefly v0.13.2-0.20220309200214-d515f268aa6b
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.1

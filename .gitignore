@@ -1,1 +1,5 @@
 main
+.DS_Store
+ff-perf/ff-perf
+ff-perf.log
+.vscode
