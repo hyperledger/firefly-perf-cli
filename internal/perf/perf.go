@@ -24,11 +24,11 @@ type PerfRunner interface {
 	Init() error
 	Start() error
 	// Data
-	RunBroadcast(id int)
-	RunPrivateMessage(id int)
+	RunBroadcast(nodeURL string, id int)
+	RunPrivateMessage(nodeURL string, id int)
 	// Tokens
 	CreateTokenPool() error
-	RunTokenMint(id int)
+	RunTokenMint(nodeURL string, id int)
 }
 
 type perfRunner struct {
@@ -41,9 +41,10 @@ type perfRunner struct {
 	poolName    string
 	shutdown    chan bool
 	tagPrefix   string
-	wsconn      wsclient.WSClient
+	wsconns     []wsclient.WSClient
 	wsReceivers []chan bool
 	wsUUID      fftypes.UUID
+	nodeURLs    []string
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
@@ -54,11 +55,17 @@ func New(config *conf.PerfConfig) PerfRunner {
 	for i := 0; i < config.Workers; i++ {
 		wsReceivers = append(wsReceivers, make(chan bool))
 	}
-	// Create websocket client
-	wsConfig := conf.GenerateWSConfig(&config.WebSocket)
-	wsconn, err := wsclient.New(context.Background(), wsConfig, nil, nil)
-	if err != nil {
-		log.Error("Could not create websocket connection: %s", err)
+
+	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
+
+	for i, nodeURL := range config.NodeURLs {
+		// Create websocket client
+		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
+		wsconn, err := wsclient.New(context.Background(), wsConfig, nil, nil)
+		if err != nil {
+			log.Error("Could not create websocket connection: %s", err)
+		}
+		wsconns[i] = wsconn
 	}
 
 	wsUUID := *fftypes.NewUUID()
@@ -72,14 +79,15 @@ func New(config *conf.PerfConfig) PerfRunner {
 		shutdown:    make(chan bool),
 		tagPrefix:   fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:  make(map[string]time.Time),
-		wsconn:      wsconn,
+		wsconns:     wsconns,
 		wsReceivers: wsReceivers,
 		wsUUID:      wsUUID,
+		nodeURLs:    config.NodeURLs,
 	}
 }
 
 func (pr *perfRunner) Init() (err error) {
-	pr.client = getFFClient(pr.cfg.Node)
+	pr.client = getFFClient(pr.nodeURLs[0])
 
 	return nil
 }
@@ -92,44 +100,49 @@ func (pr *perfRunner) Start() (err error) {
 			return err
 		}
 	}
-	// Create contract sub and listener, if needed
-	if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomContract) {
-		listenerID, err := pr.createContractListener()
+
+	for _, nodeURL := range pr.nodeURLs {
+		// Create contract sub and listener, if needed
+		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomContract) {
+			listenerID, err := pr.createContractListener(nodeURL)
+			if err != nil {
+				return err
+			}
+
+			err = pr.createContractsSub(nodeURL, listenerID)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Create subscription for message confirmations
+		err = pr.createMsgConfirmSub(nodeURL)
 		if err != nil {
 			return err
 		}
+	}
 
-		err = pr.createContractsSub(listenerID)
+	// Open websocket clients for all subscriptions
+	for _, wsconn := range pr.wsconns {
+		err = pr.openWsClient(wsconn)
 		if err != nil {
 			return err
 		}
+		go pr.eventLoop(wsconn)
 	}
-
-	// Create subscription for message confirmations
-	err = pr.createMsgConfirmSub()
-	if err != nil {
-		return err
-	}
-
-	// Open websocket client for subscription
-	err = pr.openWsClient()
-	if err != nil {
-		return err
-	}
-	go pr.eventLoop()
 
 	for id := 0; id < pr.cfg.Workers; id++ {
 		ptr := id % len(pr.cfg.Cmds)
 
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdBroadcast:
-			go pr.RunBroadcast(id)
+			go pr.RunBroadcast(pr.client.BaseURL, id)
 		case conf.PerfCmdPrivateMsg:
-			go pr.RunPrivateMessage(id)
+			go pr.RunPrivateMessage(pr.client.BaseURL, id)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint(id)
+			go pr.RunTokenMint(pr.client.BaseURL, id)
 		case conf.PerfCmdCustomContract:
-			go pr.RunCustomContract(id)
+			go pr.RunCustomContract(pr.client.BaseURL, id)
 		}
 	}
 
@@ -149,12 +162,12 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) eventLoop() (err error) {
+func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 	log.Infoln("Event loop started...")
 	for {
 		select {
 		// Wait to receive websocket event
-		case msgBytes, ok := <-pr.wsconn.Receive():
+		case msgBytes, ok := <-wsconn.Receive():
 			if !ok {
 				log.Errorf("Error receiving websocket")
 				return
@@ -200,7 +213,7 @@ func (pr *perfRunner) eventLoop() (err error) {
 				},
 			}
 			ackJSON, _ := json.Marshal(ack)
-			pr.wsconn.Send(pr.ctx, ackJSON)
+			wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
 			pr.wsReceivers[workerID] <- true
 		case <-pr.ctx.Done():
@@ -210,12 +223,12 @@ func (pr *perfRunner) eventLoop() (err error) {
 	}
 }
 
-func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action string) error {
+func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int, action string) error {
 	for {
 		select {
 		case <-pr.bfr:
 			// Worker sends its task
-			res, err := req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", pr.cfg.Node, ep))
+			res, err := req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", nodeURL, ep))
 			if err != nil {
 				log.Errorf("Error sending POST /%s: %s", ep, err)
 			}
@@ -238,7 +251,9 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
 			}
 			// Wait for worker to confirm the message before proceeding to next task
-			<-pr.wsReceivers[id]
+			for i := 0; i < len(pr.nodeURLs); i++ {
+				<-pr.wsReceivers[id]
+			}
 			log.Infof("%d <-- %s Finished", id, action)
 		case <-pr.shutdown:
 			return nil
@@ -246,11 +261,10 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, ep string, id int, action 
 	}
 }
 
-func (pr *perfRunner) createMsgConfirmSub() (err error) {
+func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
 	var readAhead uint16 = 50
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
-			ID:        &pr.wsUUID,
 			Name:      pr.tagPrefix,
 			Namespace: NAMESPACE,
 		},
@@ -275,29 +289,29 @@ func (pr *perfRunner) createMsgConfirmSub() (err error) {
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", pr.cfg.Node))
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", nodeURL))
 	if err != nil {
 		log.Errorf("Could not create subscription: %s", err)
 		return err
 	}
 
-	log.Infof("Created subscription: %s", pr.wsUUID.String())
+	log.Infof("Created subscription on %s: %s", nodeURL, pr.tagPrefix)
 
 	return nil
 }
 
-func (pr *perfRunner) openWsClient() (err error) {
-	pr.wsconn.Connect()
-	if err := pr.startSubscription(pr.tagPrefix); err != nil {
+func (pr *perfRunner) openWsClient(wsconn wsclient.WSClient) (err error) {
+	wsconn.Connect()
+	if err := pr.startSubscription(wsconn, pr.tagPrefix); err != nil {
 		return err
 	}
-	if err := pr.startSubscription(fmt.Sprintf("%s_contracts", pr.tagPrefix)); err != nil {
+	if err := pr.startSubscription(wsconn, fmt.Sprintf("%s_contracts", pr.tagPrefix)); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pr *perfRunner) startSubscription(name string) (err error) {
+func (pr *perfRunner) startSubscription(wsconn wsclient.WSClient, name string) (err error) {
 	var autoack = false
 	startPayload := fftypes.WSClientActionStartPayload{
 		WSClientActionBase: fftypes.WSClientActionBase{
@@ -308,12 +322,12 @@ func (pr *perfRunner) startSubscription(name string) (err error) {
 		Namespace: "default",
 	}
 	start, _ := json.Marshal(startPayload)
-	err = pr.wsconn.Send(pr.ctx, start)
+	err = wsconn.Send(pr.ctx, start)
 	if err != nil {
 		log.Errorf("Issuing opening websocket client: %s", err)
 		return err
 	}
-	log.Infof(`Receiving Events on subscription: "%s"`, name)
+	log.Infof(`Receiving Events subscription: "%s"`, name)
 	return nil
 }
 
@@ -366,7 +380,7 @@ func (pr *perfRunner) deleteMsgTime(msgId string) {
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) createContractListener() (string, error) {
+func (pr *perfRunner) createContractListener(nodeURL string) (string, error) {
 	subPayload := fmt.Sprintf(`{
 		"location": {
 			"address": "%s"
@@ -406,7 +420,7 @@ func (pr *perfRunner) createContractListener() (string, error) {
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/contracts/listeners", pr.cfg.Node))
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/contracts/listeners", nodeURL))
 	if err != nil {
 		return "", err
 	}
@@ -416,11 +430,11 @@ func (pr *perfRunner) createContractListener() (string, error) {
 		return "", err
 	}
 	id := responseBody["id"].(string)
-	log.Infof("Created contract listener: %s", id)
+	log.Infof("Created contract listener on %s: %s", nodeURL, id)
 	return id, nil
 }
 
-func (pr *perfRunner) createContractsSub(listenerID string) (err error) {
+func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (err error) {
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			Name:      fmt.Sprintf("%s_contracts", pr.tagPrefix),
@@ -442,13 +456,13 @@ func (pr *perfRunner) createContractsSub(listenerID string) (err error) {
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", pr.cfg.Node))
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", nodeURL))
 	if err != nil {
-		log.Errorf("Could not create subscription: %s", err)
+		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
 		return err
 	}
 
-	log.Infof("Created subscription: %s", pr.wsUUID.String())
+	log.Infof("Created contracts subscription on %s: %s", nodeURL, fmt.Sprintf("%s_contracts", pr.tagPrefix))
 
 	return nil
 }

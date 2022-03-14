@@ -6,7 +6,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 )
 
-func (pr *perfRunner) RunTokenMint(id int) {
+func (pr *perfRunner) RunTokenMint(nodeURL string, id int) {
 	payload := fmt.Sprintf(`{
 			"pool": "%s",
 			"amount": "10",
@@ -28,5 +28,5 @@ func (pr *perfRunner) RunTokenMint(id int) {
 			"Content-Type": "application/json",
 		}).
 		SetBody([]byte(payload))
-	pr.sendAndWait(req, "tokens/mint", id, conf.PerfCmdTokenMint.String())
+	pr.sendAndWait(req, nodeURL, "tokens/mint", id, conf.PerfCmdTokenMint.String())
 }

@@ -6,7 +6,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 )
 
-func (pr *perfRunner) RunCustomContract(id int) {
+func (pr *perfRunner) RunCustomContract(nodeURL string, id int) {
 	payload := fmt.Sprintf(`{
 		"location": {
 			"address": "%s"
@@ -36,5 +36,5 @@ func (pr *perfRunner) RunCustomContract(id int) {
 			"Content-Type": "application/json",
 		}).
 		SetBody([]byte(payload))
-	pr.sendAndWait(req, "contracts/invoke", id, conf.PerfCmdCustomContract.String())
+	pr.sendAndWait(req, nodeURL, "contracts/invoke", id, conf.PerfCmdCustomContract.String())
 }

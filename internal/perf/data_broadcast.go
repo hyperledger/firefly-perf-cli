@@ -6,7 +6,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 )
 
-func (pr *perfRunner) RunBroadcast(id int) {
+func (pr *perfRunner) RunBroadcast(nodeURL string, id int) {
 	payload := fmt.Sprintf(`{
 		"data":[
 		   {
@@ -25,7 +25,7 @@ func (pr *perfRunner) RunBroadcast(id int) {
 			"Content-Type": "application/json",
 		}).
 		SetBody([]byte(payload))
-	pr.sendAndWait(req, "messages/broadcast", id, conf.PerfCmdBroadcast.String())
+	pr.sendAndWait(req, nodeURL, "messages/broadcast", id, conf.PerfCmdBroadcast.String())
 }
 
 func getMessageString(id int, isLongMsg bool) string {
