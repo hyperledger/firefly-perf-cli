@@ -3,6 +3,6 @@ main
 ffperf/ffperf
 ff-perf.log
 .vscode
-
+dist/
 *.iml
 .idea/
