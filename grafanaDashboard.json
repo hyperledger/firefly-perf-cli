@@ -1928,20 +1928,23 @@
           "text": "firefly_core_0:5108",
           "value": "firefly_core_0:5108"
         },
+        "definition": "label_values(ff_apiserver_rest_requests_total, instance)",
         "description": "Instance being tested and monitored",
         "hide": 0,
+        "includeAll": false,
         "label": "Test Node",
+        "multi": false,
         "name": "test_node",
-        "options": [
-          {
-            "selected": true,
-            "text": "firefly_core_0:5108",
-            "value": "firefly_core_0:5108"
-          }
-        ],
-        "query": "firefly_core_0:5108",
+        "options": [],
+        "query": {
+          "query": "label_values(ff_apiserver_rest_requests_total, instance)",
+          "refId": "StandardVariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
         "skipUrlSync": false,
-        "type": "textbox"
+        "sort": 0,
+        "type": "query"
       }
     ]
   },
