@@ -8,35 +8,38 @@ FireFly Performance CLI is a HTTP load testing tool that generates a constant re
 - [x] Private Messaging (`POST /messages/private`)
 - [x] Mint Tokens (`POST /tokens/mint`)
 - [x] Fungible vs. Non-Fungible Token Toggle
+- [ ] Blobs
 
 ## Run a test
 
-`ff-perf msg_broadcast -l 24h -n http://localhost:5000`
+`ffperf run-tests msg_broadcast -l 24h`
 
 ## Options
 
 ```shell
 Usage:
-  ff-perf [flags]
-
-Commands:
-  msg_broadcast, msg_private, token_mint
+  ffperf run-tests [flags]
 
 Flags:
-  -h, --help               help for ff-perf
-  -l, --length duration    Length of entire performance test (default 1m0s)
-      --longMessage        Include long string in message
-  -n, --node string        FireFly node endpoint to test (default "http://localhost:5000")
-  -r, --recipient string   Recipient for FireFly messages
-      --tokenType string   [fungible nonfungible] (default "fungible")
-  -w, --workers int        Number of workers at a time (default 1)
+  -a, --address string            Address of custom contract
+      --chaincode string          Chaincode name for custom contract
+      --channel string            Fabric channel for custom contract
+  -h, --help                      help for run-tests
+  -l, --length duration           Length of entire performance test (default 1m0s)
+      --longMessage               Include long string in message
+  -r, --recipient string          Recipient for FireFly messages
+  -x, --recipientAddress string   Recipient address for FireFly transfers
+  -s, --stackJSON string          Path to stack.json file that describes the network to test
+      --tokenType string          [fungible nonfungible] (default "fungible")
+  -w, --workers int               Number of workers at a time (default 1)
+)
 ```
 
 ## Examples
 
 - 10 workers submit broadcast messages for 500 hours
 
-  - `ff-perf msg_broadcast -l 500h -w 10`
+  - `ffperf run-tests msg_broadcast -l 500h -w 10`
 
 - 75 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
-  - `ff-perf msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`
+  - `ffperf run-tests msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`

@@ -8,14 +8,14 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
-cd ~/ff-perf-testing
+cd ~/ffperf-testing
 
 # Create folder with timestamp
 DIRNAME="ff_logs_$(TZ=":US/Eastern" date +%m_%d_%Y_%I_%M_%p)"
-mkdir ~/ff-perf-testing/$DIRNAME
+mkdir ~/ffperf-testing/$DIRNAME
 
-# Copy ff-perf logs
-cp ~/ff-perf-testing/ff-perf.log ~/ff-perf-testing/$DIRNAME
+# Copy ffperf logs
+cp ~/ffperf-testing/ffperf.log ~/ffperf-testing/$DIRNAME
 
 # Fetch firefly_core_0 logs
 LOG_PATH=$(docker inspect --format='{{.LogPath}}' "$1_firefly_core_0")
