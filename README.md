@@ -20,16 +20,19 @@ FireFly Performance CLI is a HTTP load testing tool that generates a constant re
 Usage:
   ffperf run-tests [flags]
 
-Commands:
-  msg_broadcast, msg_private, token_mint, custom_ethereum_contract, custom_fabric_contract
-
 Flags:
-  -h, --help               help for ffperf
-  -l, --length duration    Length of entire performance test (default 1m0s)
-      --longMessage        Include long string in message
-  -r, --recipient string   Recipient for FireFly messages
-      --tokenType string   [fungible nonfungible] (default "fungible")
-  -w, --workers int        Number of workers at a time (default 1)
+  -a, --address string            Address of custom contract
+      --chaincode string          Chaincode name for custom contract
+      --channel string            Fabric channel for custom contract
+  -h, --help                      help for run-tests
+  -l, --length duration           Length of entire performance test (default 1m0s)
+      --longMessage               Include long string in message
+  -r, --recipient string          Recipient for FireFly messages
+  -x, --recipientAddress string   Recipient address for FireFly transfers
+  -s, --stackJSON string          Path to stack.json file that describes the network to test
+      --tokenType string          [fungible nonfungible] (default "fungible")
+  -w, --workers int               Number of workers at a time (default 1)
+)
 ```
 
 ## Examples

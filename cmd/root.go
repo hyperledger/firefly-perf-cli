@@ -36,9 +36,9 @@ func GetFireflyAsciiArt() string {
 
 var rootCmd = &cobra.Command{
 	Use:   "ffperf",
-	Short: "A CLI tool to generate synthetic load against and triage performance issues within a FireFly network",
+	Short: "A CLI tool to generate synthetic load against and triaging performance issues within a FireFly network",
 	Long: GetFireflyAsciiArt() + `
-FireFly Performance CLI is a tool to generate synthetic load against and triage performance issues within a FireFly network.
+FireFly Performance CLI is a tool to generate synthetic load against and triaging performance issues within a FireFly network.
 	`,
 }
 

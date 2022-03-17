@@ -23,9 +23,9 @@ var runTestsConfig conf.PerfConfig
 // runTestsCmd represents the run-tests command
 var runTestsCmd = &cobra.Command{
 	Use:   "run-tests",
-	Short: "Runs the provided list of tests against a FireFly node to generate synthetic load",
+	Short: "Executes the provided list of tests against a FireFly node to generate synthetic load",
 	Long: GetFireflyAsciiArt() + `
-run-tests runs the provided list of tests against a FireFly node to generate synthetic load
+Executes the provided list of tests against a FireFly node to generate synthetic load.
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		runTestsConfig.WebSocket = conf.FireFlyWsConf{

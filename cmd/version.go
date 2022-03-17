@@ -28,7 +28,9 @@ type Info struct {
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Prints the version info",
-	Long:  "Prints the version info of the CLI binary",
+	Long: GetFireflyAsciiArt() + `
+Prints the version info of the CLI binary.
+`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if shortened {
 			fmt.Println(version.Version)
