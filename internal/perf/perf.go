@@ -103,12 +103,22 @@ func (pr *perfRunner) Start() (err error) {
 
 	for _, nodeURL := range pr.nodeURLs {
 		// Create contract sub and listener, if needed
-		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomContract) {
-			listenerID, err := pr.createContractListener(nodeURL)
+		var listenerID string
+		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomEthereumContract) {
+			listenerID, err = pr.createEthereumContractListener(nodeURL)
 			if err != nil {
 				return err
 			}
+		}
 
+		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomFabricContract) {
+			listenerID, err = pr.createFabricContractListener(nodeURL)
+			if err != nil {
+				return err
+			}
+		}
+
+		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomEthereumContract) || containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomFabricContract) {
 			err = pr.createContractsSub(nodeURL, listenerID)
 			if err != nil {
 				return err
@@ -141,8 +151,10 @@ func (pr *perfRunner) Start() (err error) {
 			go pr.RunPrivateMessage(pr.client.BaseURL, id)
 		case conf.PerfCmdTokenMint:
 			go pr.RunTokenMint(pr.client.BaseURL, id)
-		case conf.PerfCmdCustomContract:
-			go pr.RunCustomContract(pr.client.BaseURL, id)
+		case conf.PerfCmdCustomEthereumContract:
+			go pr.RunCustomEthereumContract(pr.client.BaseURL, id)
+		case conf.PerfCmdCustomFabricContract:
+			go pr.RunCustomFabricContract(pr.client.BaseURL, id)
 		}
 	}
 
@@ -176,7 +188,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			var event fftypes.EventDelivery
 			json.Unmarshal(msgBytes, &event)
 
-			var workerID int = -1
+			workerID := -1
 
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
@@ -184,7 +196,13 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 					log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
 					return fmt.Errorf("blockchain event not found for event: %s", event.ID)
 				}
-				value := event.BlockchainEvent.Output.GetString("value")
+				var value string
+				switch event.BlockchainEvent.Source {
+				case "ethereum":
+					value = event.BlockchainEvent.Output.GetString("value")
+				case "fabric":
+					value = event.BlockchainEvent.Output.GetString("name")
+				}
 				workerID, err = strconv.Atoi(value)
 				if err != nil {
 					log.Errorf("Could not parse event value: %s", err)
@@ -217,7 +235,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			ackJSON, _ := json.Marshal(ack)
 			wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
-			if workerID > 0 {
+			if workerID >= 0 {
 				pr.wsReceivers[workerID] <- true
 			}
 		case <-pr.ctx.Done():
@@ -250,7 +268,7 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 				json.Unmarshal(res.Body(), &tokenRes)
 				pr.updateMsgTime(tokenRes.LocalID.String())
 				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
-			case conf.PerfCmdCustomContract.String():
+			case conf.PerfCmdCustomEthereumContract.String(), conf.PerfCmdCustomFabricContract.String():
 				json.Unmarshal(res.Body(), &contractRes)
 				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
 			}
@@ -384,7 +402,7 @@ func (pr *perfRunner) deleteMsgTime(msgId string) {
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) createContractListener(nodeURL string) (string, error) {
+func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
 	subPayload := fmt.Sprintf(`{
 		"location": {
 			"address": "%s"
@@ -417,6 +435,37 @@ func (pr *perfRunner) createContractListener(nodeURL string) (string, error) {
 			]
 		}
 	}`, pr.cfg.ContractOptions.Address)
+
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/contracts/listeners", nodeURL))
+	if err != nil {
+		return "", err
+	}
+	var responseBody map[string]interface{}
+	err = json.Unmarshal(res.Body(), &responseBody)
+	if err != nil {
+		return "", err
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Created contract listener on %s: %s", nodeURL, id)
+	return id, nil
+}
+
+func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, error) {
+	subPayload := fmt.Sprintf(`{
+		"location": {
+			"channel": "%s",
+			"chaincode": "%s"
+		},
+		"event": {
+			"name": "AssetCreated"
+		}
+	}`, pr.cfg.ContractOptions.Channel, pr.cfg.ContractOptions.Chaincode)
 
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
