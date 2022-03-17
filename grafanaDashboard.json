@@ -111,8 +111,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "rate(ff_apiserver_rest_requests_total{instance=\"$test_node\"}[$__rate_interval])",
@@ -152,8 +151,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "sum(rate(ff_apiserver_rest_request_duration_seconds_bucket{instance=\"$test_node\"}[$__rate_interval])) by (le)",
@@ -235,8 +233,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_broadcast_submitted_total{instance=\"$test_node\"}",
@@ -290,8 +287,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_broadcast_confirmed_total{instance=\"$test_node\"}",
@@ -345,8 +341,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_broadcast_rejected_total{instance=\"$test_node\"}",
@@ -386,8 +381,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "sum(rate(ff_broadcast_histogram_bucket{instance=\"$test_node\"}[$__rate_interval])) by (le)",
@@ -456,8 +450,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=~\"/api/v1/namespaces/{ns}/messages/broadcast\",code=~\"200|202\",instance=\"$test_node\"}",
@@ -516,8 +509,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=\"/api/v1/namespaces/{ns}/messages/broadcast\",code=\"500\",instance=\"$test_node\"}",
@@ -598,8 +590,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_broadcast_submitted_total{instance=\"$test_node\"}-ff_broadcast_confirmed_total{instance=\"$test_node\"}+ff_broadcast_rejected_total{instance=\"$test_node\"}",
@@ -680,8 +671,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": false,
           "expr": "ff_apiserver_rest_requests_total{route=\"/api/v1/namespaces/{ns}/messages/broadcast\",code=\"500\",instance=\"$test_node\"}",
@@ -749,8 +739,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_private_msg_submitted_total{instance=\"$test_node\"}",
@@ -804,8 +793,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_private_msg_confirmed_total{instance=\"$test_node\"}",
@@ -859,8 +847,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_private_msg_rejected_total{instance=\"$test_node\"}",
@@ -900,8 +887,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "sum(rate(ff_private_msg_histogram_bucket{instance=\"$test_node\"}[$__rate_interval])) by (le)",
@@ -970,8 +956,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=~\"/api/v1/namespaces/{ns}/messages/private\",code=~\"202\",instance=\"$test_node\"}",
@@ -1031,8 +1016,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=\"/api/v1/namespaces/{ns}/messages/private\",code=\"500\",instance=\"$test_node\"}",
@@ -1113,8 +1097,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_private_msg_submitted_total{instance=\"$test_node\"}-ff_private_msg_confirmed_total{instance=\"$test_node\"}+ff_private_msg_rejected_total{instance=\"$test_node\"}",
@@ -1199,8 +1182,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=\"/api/v1/namespaces/{ns}/messages/private\",code=\"500\",instance=\"$test_node\"}",
@@ -1268,8 +1250,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_mint_submitted_total{instance=\"$test_node\"}",
@@ -1323,8 +1304,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_mint_confirmed_total{instance=\"$test_node\"}",
@@ -1378,8 +1358,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_mint_rejected_total{instance=\"$test_node\"}",
@@ -1419,8 +1398,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "sum(rate(ff_mint_histogram_bucket{instance=\"$test_node\"}[$__rate_interval])) by (le)",
@@ -1489,8 +1467,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=~\"/api/v1/namespaces/{ns}/tokens/mint\",code=~\"200|202\",instance=\"$test_node\"}",
@@ -1565,8 +1542,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=~\"/api/v1/namespaces/{ns}/tokens/mint\",code=\"500\",instance=\"$test_node\"}",
@@ -1647,8 +1623,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_mint_submitted_total{instance=\"$test_node\"}-ff_mint_confirmed_total{instance=\"$test_node\"}+ff_mint_rejected_total{instance=\"$test_node\"}",
@@ -1749,8 +1724,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_apiserver_rest_requests_total{route=\"/api/v1/namespaces/{ns}/tokens/mint\",code=\"500\",instance=\"$test_node\"}",
@@ -1818,8 +1792,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "ff_batchpin_total{instance=\"$test_node\"}",
@@ -1902,8 +1875,7 @@
       "targets": [
         {
           "datasource": {
-            "type": "prometheus",
-            "uid": "FwnjnVA7z"
+            "type": "prometheus"
           },
           "exemplar": true,
           "expr": "(ff_broadcast_submitted_total+ff_private_msg_submitted_total)/ff_batchpin_total",

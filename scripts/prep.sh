@@ -59,7 +59,7 @@ cd $BASE_PATH
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
 if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
-    output=$(ff deploy $NEW_STACK_NAME /firefly/test/data/simplestorage/simple_storage.json | grep address)
+    output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | grep address)
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
@@ -76,7 +76,7 @@ fi
 echo "FLAGS=$FLAGS"
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
-printf "${GREEN}nohup ffperf $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ffperf.log &${NC}\n"
+printf "${GREEN}nohup ffperf run-tests $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ffperf.log &${NC}\n"
 
 # Create markdown for Perf Test
 printf "\n${RED}*** Before Starting Test ***${NC}\n"
