@@ -126,6 +126,8 @@ func init() {
 	rootCmd.Flags().StringVar(&rootConfig.TokenOptions.TokenType, "tokenType", fftypes.TokenTypeFungible.String(), fmt.Sprintf("[%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String()))
 	rootCmd.Flags().IntVarP(&rootConfig.Workers, "workers", "w", 1, "Number of workers at a time")
 	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Address, "address", "a", "", "Address of custom contract")
+	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Channel, "channel", "", "", "Fabric channel for custom contract")
+	rootCmd.Flags().StringVarP(&rootConfig.ContractOptions.Chaincode, "chaincode", "", "", "Chaincode name for custom contract")
 	rootCmd.Flags().StringVarP(&rootConfig.StackJSONPath, "stackJSON", "s", "", "Path to stack.json file that describes the network to test")
 }
 

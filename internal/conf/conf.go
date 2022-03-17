@@ -18,7 +18,9 @@ type TokenOptions struct {
 }
 
 type ContractOptions struct {
-	Address string
+	Address   string
+	Channel   string
+	Chaincode string
 }
 
 type PerfConfig struct {
@@ -66,15 +68,18 @@ var (
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdCustomContract invokes and queries a custom smart contract
-	PerfCmdCustomContract fftypes.FFEnum = "custom_contract"
+	// PerfCmdCustomEthereumContract invokes and queries a custom smart contract
+	PerfCmdCustomEthereumContract fftypes.FFEnum = "custom_ethereum_contract"
+	// PerfCmdCustomFabricContract invokes and queries a custom smart contract
+	PerfCmdCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdBroadcast.String():      PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String():     PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():      PerfCmdTokenMint,
-	PerfCmdCustomContract.String(): PerfCmdCustomContract,
+	PerfCmdBroadcast.String():              PerfCmdBroadcast,
+	PerfCmdPrivateMsg.String():             PerfCmdPrivateMsg,
+	PerfCmdTokenMint.String():              PerfCmdTokenMint,
+	PerfCmdCustomEthereumContract.String(): PerfCmdCustomEthereumContract,
+	PerfCmdCustomFabricContract.String():   PerfCmdCustomFabricContract,
 }
 
 func ValidCommandsString() []string {
