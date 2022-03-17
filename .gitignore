@@ -1,5 +1,8 @@
 main
 .DS_Store
-ff-perf/ff-perf
+ffperf/ffperf
 ff-perf.log
 .vscode
+
+*.iml
+.idea/

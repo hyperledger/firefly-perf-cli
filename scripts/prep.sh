@@ -5,7 +5,7 @@ PURPLE='\033[0;35m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-BASE_PATH=~/ff-perf-testing
+BASE_PATH=~/ffperf-testing
 
 # Verify three arguments were given
 if [ $# -ne 3 ]; then
@@ -20,15 +20,15 @@ BLOCKCHAIN_PROVIDER=$3
 JOBS="msg_broadcast msg_private"
 FLAGS=""
 
-# Kill existing ff-perf processes
+# Kill existing ffperf processes
 printf "${PURPLE}Killing ff-perf processes...\n${NC}"
-pkill -f 'ff-perf'
-rm $BASE_PATH/ff-perf.log
+pkill -f 'ffperf'
+rm $BASE_PATH/ffperf.log
 
-# Install local ff-perf-cli
+# Install local ffperf-cli
 printf "${PURPLE}Installing local ff-perf-cli...\n${NC}"
 cd $BASE_PATH/firefly-perf-cli
-go install ./ff-perf
+go install ./ffperf
 
 # Build firefly image
 printf "${PURPLE}Building FireFly Image...\n${NC}"
@@ -76,7 +76,7 @@ fi
 echo "FLAGS=$FLAGS"
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
-printf "${GREEN}nohup ff-perf $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ff-perf.log &${NC}\n"
+printf "${GREEN}nohup ffperf $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ff-perf.log &${NC}\n"
 
 # Create markdown for Perf Test
 printf "\n${RED}*** Before Starting Test ***${NC}\n"

@@ -5,7 +5,7 @@
 - Create a folder structure as below:
 
   ```bash
-  ~/ff-perf-testing/
+  ~/ffperf-testing/
   ├
   ├── firefly
   │   ├── <Firefly Files>
@@ -20,13 +20,13 @@
 - Helper commands to make folder structure from above:
   ```bash
   # From the firefly-perf-cli folder
-  mkdir ~/ff-perf-testing
-  git clone git@github.com:hyperledger/firefly.git ~/ff-perf-testing/firefly
-  git clone git@github.com:hyperledger/firefly-perf-cli.git ~/ff-perf-testing/firefly-perf-cli
-  cp scripts/getLogs.sh ~/ff-perf-testing/getLogs.sh
-  chmod +x ~/ff-perf-testing/getLogs.sh
-  cp scripts/prep.sh ~/ff-perf-testing/prep.sh
-  chmod +x ~/ff-perf-testing/prep.sh
+  mkdir ~/ffperf-testing
+  git clone git@github.com:hyperledger/firefly.git ~/ffperf-testing/firefly
+  git clone git@github.com:hyperledger/firefly-perf-cli.git ~/ffperf-testing/firefly-perf-cli
+  cp scripts/getLogs.sh ~/ffperf-testing/getLogs.sh
+  chmod +x ~/ffperf-testing/getLogs.sh
+  cp scripts/prep.sh ~/ffperf-testing/prep.sh
+  chmod +x ~/ffperf-testing/prep.sh
   ```
 
 ## Preparing Environment
@@ -34,14 +34,14 @@
 ### Checkout firefly branch you want to test
 
 ```bash
-cd ~/ff-perf-testing/firefly
+cd ~/ffperf-testing/firefly
 git checkout ...
 ```
 
 ### Checkout ff-perf-cli branch you want to use for test
 
 ```bash
-cd ~/ff-perf-testing/firefly-perf-cli
+cd ~/ffperf-testing/firefly-perf-cli
 git checkout ...
 ```
 
@@ -62,7 +62,7 @@ git checkout ...
 
 - Run:
   ```bash
-  cd ~/ff-perf-testing
+  cd ~/ffperf-testing
   ./prep.sh <old_stack_name> <new_stack_name> <blockchain_type>
   # ex: ./prep.sh oldStack newStack geth
   ```
@@ -73,12 +73,12 @@ git checkout ...
 
 - `./getLogs.sh` is a script that does the following:
 
-  1. Finds location of firefly_core, ethconnect, and ff-perf logs
+  1. Finds location of firefly_core, ethconnect, and ffperf logs
   2. Stores the compressed logs in a timestamped directory in ~/ff-perf-testing
   3. ```bash
-     ~/ff-perf-testing/
+     ~/ffperf-testing/
      ├── /ff_logs_03_03_2022_01_18_PM/
-     │   ├── ff-perf.log
+     │   ├── ffperf.log
      │   ├── log_ethconnect_0.log.gz
      │   └── log_firefly_core_0.log.gz
      ```
@@ -86,7 +86,7 @@ git checkout ...
 - Run:
 
   ```bash
-  cd ~/ff-perf-testing
+  cd ~/ffperf-testing
   ./getLogs.sh <stack_name>
   # ex: ./getLogs.sh test
   ```
