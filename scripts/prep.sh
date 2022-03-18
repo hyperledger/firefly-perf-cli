@@ -21,14 +21,14 @@ JOBS="msg_broadcast msg_private"
 FLAGS=""
 
 # Kill existing ffperf processes
-printf "${PURPLE}Killing ff-perf processes...\n${NC}"
+printf "${PURPLE}Killing ffperf processes...\n${NC}"
 pkill -f 'ffperf'
 rm $BASE_PATH/ffperf.log
 
 # Install local ffperf-cli
-printf "${PURPLE}Installing local ff-perf-cli...\n${NC}"
+printf "${PURPLE}Installing local ffperf CLI...\n${NC}"
 cd $BASE_PATH/firefly-perf-cli
-go install ./ffperf
+make
 
 # Build firefly image
 printf "${PURPLE}Building FireFly Image...\n${NC}"
@@ -59,7 +59,7 @@ cd $BASE_PATH
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
 if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
-    output=$(ff deploy $NEW_STACK_NAME /firefly/test/data/simplestorage/simple_storage.json | grep address)
+    output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | grep address)
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
@@ -76,7 +76,7 @@ fi
 echo "FLAGS=$FLAGS"
 
 printf "${PURPLE}Modify the command below and run...\n${NC}"
-printf "${GREEN}nohup ffperf $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ff-perf.log &${NC}\n"
+printf "${GREEN}nohup ffperf run-tests $JOBS -l 500h -r \"$ORG_IDENTITY\" -x \"$ORG_ADDRESS\" -w 100 -s ~/.firefly/stacks/$NEW_STACK_NAME/stack.json $FLAGS &> ffperf.log &${NC}\n"
 
 # Create markdown for Perf Test
 printf "\n${RED}*** Before Starting Test ***${NC}\n"

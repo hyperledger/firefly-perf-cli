@@ -24,9 +24,7 @@
   git clone git@github.com:hyperledger/firefly.git ~/ffperf-testing/firefly
   git clone git@github.com:hyperledger/firefly-perf-cli.git ~/ffperf-testing/firefly-perf-cli
   cp scripts/getLogs.sh ~/ffperf-testing/getLogs.sh
-  chmod +x ~/ffperf-testing/getLogs.sh
   cp scripts/prep.sh ~/ffperf-testing/prep.sh
-  chmod +x ~/ffperf-testing/prep.sh
   ```
 
 ## Preparing Environment
