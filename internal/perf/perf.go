@@ -186,6 +186,8 @@ func (pr *perfRunner) Start() (err error) {
 			go pr.RunCustomFabricContract(pr.client.BaseURL, id)
 		case conf.PerfBlobBroadcast:
 			go pr.RunBlobBroadcast(pr.client.BaseURL, id)
+		case conf.PerfBlobPrivateMsg:
+			go pr.RunBlobPrivateMessage(pr.client.BaseURL, id)
 		}
 	}
 
@@ -249,7 +251,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 					return fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
 				}
 				switch subInfo.Job {
-				case conf.PerfBlobBroadcast:
+				case conf.PerfBlobBroadcast, conf.PerfBlobPrivateMsg:
 					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
 				default:
 					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
@@ -318,10 +320,10 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 			case conf.PerfCmdCustomEthereumContract.String(), conf.PerfCmdCustomFabricContract.String():
 				json.Unmarshal(res.Body(), &contractRes)
 				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
-			case conf.PerfBlobBroadcast.String():
+			case conf.PerfBlobBroadcast.String(), conf.PerfBlobPrivateMsg.String():
 				json.Unmarshal(res.Body(), &msgRes)
 				pr.updateMsgTime(msgRes.Header.ID.String())
-				log.Infof("%d --> Broadcasted blob: %s", id, msgRes.Header.ID)
+				log.Infof("%d --> Sent blob: %s", id, msgRes.Header.ID)
 			}
 			// Wait for worker to confirm the message before proceeding to next task
 			for i := 0; i < len(pr.nodeURLs); i++ {

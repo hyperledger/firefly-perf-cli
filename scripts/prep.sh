@@ -17,7 +17,7 @@ OLD_STACK_NAME=$1
 NEW_STACK_NAME=$2
 BLOCKCHAIN_PROVIDER=$3
 
-JOBS="msg_broadcast msg_private"
+JOBS="msg_broadcast msg_private blob_broadcast blob_private"
 FLAGS=""
 
 # Kill existing ffperf processes

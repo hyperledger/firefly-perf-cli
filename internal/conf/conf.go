@@ -74,6 +74,8 @@ var (
 	PerfCmdCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
 	// PerfBlobBroadcast broadcasts a blob
 	PerfBlobBroadcast fftypes.FFEnum = "blob_broadcast"
+	// PerfBlobBroadcast broadcasts a blob
+	PerfBlobPrivateMsg fftypes.FFEnum = "blob_private"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
@@ -83,6 +85,7 @@ var ValidPerfCommands = map[string]fftypes.FFEnum{
 	PerfCmdCustomEthereumContract.String(): PerfCmdCustomEthereumContract,
 	PerfCmdCustomFabricContract.String():   PerfCmdCustomFabricContract,
 	PerfBlobBroadcast.String():             PerfBlobBroadcast,
+	PerfBlobPrivateMsg.String():            PerfBlobPrivateMsg,
 }
 
 func ValidCommandsString() []string {
