@@ -131,7 +131,7 @@ func validateCommands(cmds []string) error {
 }
 
 func validateConfig(cfg conf.PerfRunnerConfig) error {
-	if cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
+	if cfg.TokenOptions.TokenType != "" && cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
 		return fmt.Errorf("invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String())
 	}
 	return nil

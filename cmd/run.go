@@ -64,7 +64,7 @@ Executes a instance within a performance test suite to generate synthetic load a
 				return errors.Errorf("did not find instance named \"%s\" within the provided config", instanceName)
 			}
 		} else if instanceIndex != -1 {
-			if instanceIndex >= len(config.Instances) {
+			if instanceIndex >= len(config.Instances) || instanceIndex < 0 {
 				return errors.Errorf("provided instance index \"%d\" is outside of the range of instances within the provided config", instanceIndex)
 			}
 			instance = &config.Instances[instanceIndex]
@@ -81,7 +81,7 @@ Executes a instance within a performance test suite to generate synthetic load a
 			if runnerConfig.StackJSONPath == "" {
 				runnerConfig.NodeURLs = []string{"http://localhost:5000"}
 			} else {
-				stack, err := readStackJSON(runTestsConfig.StackJSONPath)
+				stack, err := readStackJSON(runnerConfig.StackJSONPath)
 				if err != nil {
 					return err
 				}
@@ -119,8 +119,8 @@ func init() {
 	// is called directly, e.g.:
 	// runCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 	runCmd.Flags().StringVarP(&configFilePath, "config", "c", "", "Path to performance config that describes the network and test instances")
-	runCmd.Flags().StringVarP(&instanceName, "instance-name", "i", "", "Instance within performance config to run against the network")
-	runCmd.Flags().IntVarP(&instanceIndex, "instance-idx", "n", -1, "Index of the instance within performance config to run against the network")
+	runCmd.Flags().StringVarP(&instanceName, "instance-name", "n", "", "Instance within performance config to run against the network")
+	runCmd.Flags().IntVarP(&instanceIndex, "instance-idx", "i", -1, "Index of the instance within performance config to run against the network")
 
 	runCmd.MarkFlagRequired("config")
 }
@@ -131,7 +131,8 @@ func loadPerfConfig(filename string) (*conf.PerformanceTestConfig, error) {
 	} else {
 		var config *conf.PerformanceTestConfig
 		var err error
-		if path.Ext(filename) == "yaml" {
+		log.Info(path.Ext(filename))
+		if path.Ext(filename) == ".yaml" {
 			err = yaml.Unmarshal(d, &config)
 		} else {
 			err = json.Unmarshal(d, &config)
@@ -145,9 +146,9 @@ func loadPerfConfig(filename string) (*conf.PerformanceTestConfig, error) {
 }
 
 func loadRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig *conf.PerformanceTestConfig) (*conf.PerfRunnerConfig, error) {
-	var runnerConfig *conf.PerfRunnerConfig
-
-	runnerConfig.Tests = []fftypes.FFEnum{instance.Test}
+	runnerConfig := &conf.PerfRunnerConfig{
+		Tests: []fftypes.FFEnum{instance.Test},
+	}
 
 	switch instance.Test {
 	case conf.PerfTestBroadcast:

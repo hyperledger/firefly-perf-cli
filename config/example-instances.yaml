@@ -1,18 +1,43 @@
-stackJSONPath:
+stackJSONPath: ${HOME}/.firefly/stacks/dev/stack.json
 
-websocketConfig:
+wsConfig:
+  wsPath: /ws
   readBufferSize: 16000
   writeBufferSize: 16000
-  initialDelay: 250000000
-  maximumDelay: 30000000000
+  initialDelay: 250ms
+  maximumDelay: 30s
   initialConnectAttempts: 5
 
 instances:
-  - name: ff1-ff2
+  - name: ff1-ff2-broadcast
     test: msg_broadcast
     length: 3m
-    recipient: ff2
-    recipientAddress: ...
-    workers: 30
+    recipient: did:firefly:org/org_1
+    recipientAddress: 0xe6d5d6d2d107c2d79d6593bbf1e63396dbae3ba3
+    workers: 10
     messageOptions:
       longMessage: true
+  - name: ff1-ff2-private
+    test: msg_private
+    length: 3m
+    recipient: did:firefly:org/org_1
+    recipientAddress: 0xe6d5d6d2d107c2d79d6593bbf1e63396dbae3ba3
+    workers: 10
+    messageOptions:
+      longMessage: true
+  - name: ff1-ff2-mint
+    test: token_mint
+    length: 3m
+    recipient: did:firefly:org/org_1
+    recipientAddress: 0xe6d5d6d2d107c2d79d6593bbf1e63396dbae3ba3
+    workers: 10
+    tokenOptions:
+      tokenType: fungible
+  - name: ff1-ff2-contract
+    test: custom_ethereum_contract
+    length: 3m
+    recipient: did:firefly:org/org_1
+    recipientAddress: 0xe6d5d6d2d107c2d79d6593bbf1e63396dbae3ba3
+    workers: 10
+    contractOptions:
+      address: 0xef6d5f6d2c109c2179e6503b9a1e63376dbae3ba5
