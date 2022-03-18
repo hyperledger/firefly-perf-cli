@@ -58,6 +58,7 @@ Executes a instance within a performance test suite to generate synthetic load a
 			for _, i := range config.Instances {
 				if i.Name == instanceName {
 					instance = &i
+					break
 				}
 			}
 			if instance == nil {
@@ -72,28 +73,26 @@ Executes a instance within a performance test suite to generate synthetic load a
 			return errors.Errorf("please set either the \"instance-name\" or \"instance-index\" ")
 		}
 
-		if perfRunner == nil {
-			runnerConfig, err := loadRunnerConfigFromInstance(instance, config)
+		runnerConfig, err := loadRunnerConfigFromInstance(instance, config)
+		if err != nil {
+			return err
+		}
+
+		if runnerConfig.StackJSONPath == "" {
+			runnerConfig.NodeURLs = []string{"http://localhost:5000"}
+		} else {
+			stack, err := readStackJSON(runnerConfig.StackJSONPath)
 			if err != nil {
 				return err
 			}
-
-			if runnerConfig.StackJSONPath == "" {
-				runnerConfig.NodeURLs = []string{"http://localhost:5000"}
-			} else {
-				stack, err := readStackJSON(runnerConfig.StackJSONPath)
-				if err != nil {
-					return err
-				}
-				runnerConfig.NodeURLs = make([]string, len(stack.Members))
-				for i, member := range stack.Members {
-					// TODO dont hardcode to localhost
-					runnerConfig.NodeURLs[i] = fmt.Sprintf("http://localhost:%v", member.ExposedFireflyPort)
-				}
+			runnerConfig.NodeURLs = make([]string, len(stack.Members))
+			for i, member := range stack.Members {
+				// TODO dont hardcode to localhost
+				runnerConfig.NodeURLs[i] = fmt.Sprintf("http://localhost:%v", member.ExposedFireflyPort)
 			}
-
-			perfRunner = perf.New(runnerConfig)
 		}
+
+		perfRunner = perf.New(runnerConfig)
 
 		return nil
 	},

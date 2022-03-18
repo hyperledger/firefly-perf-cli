@@ -25,7 +25,7 @@ rm $BASE_PATH/ffperf.log
 # Install local ffperf-cli
 printf "${PURPLE}Installing local ffperf CLI...\n${NC}"
 cd $BASE_PATH/firefly-perf-cli
-make
+make install
 
 # Build firefly image
 printf "${PURPLE}Building FireFly Image...\n${NC}"
@@ -113,7 +113,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
     JOBS="$JOBS token_mint custom_ethereum_contract"
-    cat <<EOF >> $BASE_PATH/instances.yam
+    cat <<EOF >> $BASE_PATH/instances.yaml
   - name: ff1-ff2-mint
     test: token_mint
     length: 5m
