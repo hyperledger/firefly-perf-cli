@@ -68,10 +68,14 @@ var (
 	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
 	// PerfCmdTokenMint mints tokens in a token pool
 	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdCustomEthereumContract invokes and queries a custom smart contract
+	// PerfCmdCustomEthereumContract invokes a custom smart contract and checks events emitted by it
 	PerfCmdCustomEthereumContract fftypes.FFEnum = "custom_ethereum_contract"
-	// PerfCmdCustomFabricContract invokes and queries a custom smart contract
+	// PerfCmdCustomFabricContract invokes a custom smart contract and checks events emitted by it
 	PerfCmdCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
+	// PerfBlobBroadcast broadcasts a blob
+	PerfBlobBroadcast fftypes.FFEnum = "blob_broadcast"
+	// PerfBlobBroadcast broadcasts a blob
+	PerfBlobPrivateMsg fftypes.FFEnum = "blob_private"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
@@ -80,6 +84,8 @@ var ValidPerfCommands = map[string]fftypes.FFEnum{
 	PerfCmdTokenMint.String():              PerfCmdTokenMint,
 	PerfCmdCustomEthereumContract.String(): PerfCmdCustomEthereumContract,
 	PerfCmdCustomFabricContract.String():   PerfCmdCustomFabricContract,
+	PerfBlobBroadcast.String():             PerfBlobBroadcast,
+	PerfBlobPrivateMsg.String():            PerfBlobPrivateMsg,
 }
 
 func ValidCommandsString() []string {

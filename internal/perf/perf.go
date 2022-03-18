@@ -32,19 +32,25 @@ type PerfRunner interface {
 }
 
 type perfRunner struct {
-	bfr         chan int
-	cfg         *conf.PerfConfig
-	client      *resty.Client
-	ctx         context.Context
-	endTime     int64
-	msgTimeMap  map[string]time.Time
-	poolName    string
-	shutdown    chan bool
-	tagPrefix   string
-	wsconns     []wsclient.WSClient
-	wsReceivers []chan bool
-	wsUUID      fftypes.UUID
-	nodeURLs    []string
+	bfr             chan int
+	cfg             *conf.PerfConfig
+	client          *resty.Client
+	ctx             context.Context
+	endTime         int64
+	msgTimeMap      map[string]time.Time
+	poolName        string
+	shutdown        chan bool
+	tagPrefix       string
+	wsconns         []wsclient.WSClient
+	wsReceivers     []chan bool
+	wsUUID          fftypes.UUID
+	nodeURLs        []string
+	subscriptionMap map[string]SubscriptionInfo
+}
+
+type SubscriptionInfo struct {
+	NodeURL string
+	Job     fftypes.FFEnum
 }
 
 func New(config *conf.PerfConfig) PerfRunner {
@@ -71,18 +77,19 @@ func New(config *conf.PerfConfig) PerfRunner {
 	wsUUID := *fftypes.NewUUID()
 
 	return &perfRunner{
-		bfr:         make(chan int, config.Workers),
-		cfg:         config,
-		ctx:         context.Background(),
-		endTime:     time.Now().Unix() + int64(config.Length.Seconds()),
-		poolName:    poolName,
-		shutdown:    make(chan bool),
-		tagPrefix:   fmt.Sprintf("perf_%s", wsUUID.String()),
-		msgTimeMap:  make(map[string]time.Time),
-		wsconns:     wsconns,
-		wsReceivers: wsReceivers,
-		wsUUID:      wsUUID,
-		nodeURLs:    config.NodeURLs,
+		bfr:             make(chan int, config.Workers),
+		cfg:             config,
+		ctx:             context.Background(),
+		endTime:         time.Now().Unix() + int64(config.Length.Seconds()),
+		poolName:        poolName,
+		shutdown:        make(chan bool),
+		tagPrefix:       fmt.Sprintf("perf_%s", wsUUID.String()),
+		msgTimeMap:      make(map[string]time.Time),
+		wsconns:         wsconns,
+		wsReceivers:     wsReceivers,
+		wsUUID:          wsUUID,
+		nodeURLs:        config.NodeURLs,
+		subscriptionMap: make(map[string]SubscriptionInfo),
 	}
 }
 
@@ -109,6 +116,14 @@ func (pr *perfRunner) Start() (err error) {
 			if err != nil {
 				return err
 			}
+			subID, err := pr.createContractsSub(nodeURL, listenerID)
+			if err != nil {
+				return err
+			}
+			pr.subscriptionMap[subID] = SubscriptionInfo{
+				NodeURL: nodeURL,
+				Job:     conf.PerfCmdCustomEthereumContract,
+			}
 		}
 
 		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomFabricContract) {
@@ -116,19 +131,33 @@ func (pr *perfRunner) Start() (err error) {
 			if err != nil {
 				return err
 			}
-		}
-
-		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomEthereumContract) || containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomFabricContract) {
-			err = pr.createContractsSub(nodeURL, listenerID)
+			subID, err := pr.createContractsSub(nodeURL, listenerID)
 			if err != nil {
 				return err
+			}
+			pr.subscriptionMap[subID] = SubscriptionInfo{
+				NodeURL: nodeURL,
+				Job:     conf.PerfCmdCustomFabricContract,
 			}
 		}
 
 		// Create subscription for message confirmations
-		err = pr.createMsgConfirmSub(nodeURL)
+		subID, err := pr.createMsgConfirmSub(nodeURL, pr.tagPrefix, fmt.Sprintf("^%s_", pr.tagPrefix))
 		if err != nil {
 			return err
+		}
+		pr.subscriptionMap[subID] = SubscriptionInfo{
+			NodeURL: nodeURL,
+			Job:     conf.PerfCmdBroadcast,
+		}
+		// Create subscription for blob message confirmations
+		subID, err = pr.createMsgConfirmSub(nodeURL, fmt.Sprintf("blob_%s", pr.tagPrefix), fmt.Sprintf("^blob_%s_", pr.tagPrefix))
+		if err != nil {
+			return err
+		}
+		pr.subscriptionMap[subID] = SubscriptionInfo{
+			NodeURL: nodeURL,
+			Job:     conf.PerfBlobBroadcast,
 		}
 	}
 
@@ -155,6 +184,10 @@ func (pr *perfRunner) Start() (err error) {
 			go pr.RunCustomEthereumContract(pr.client.BaseURL, id)
 		case conf.PerfCmdCustomFabricContract:
 			go pr.RunCustomFabricContract(pr.client.BaseURL, id)
+		case conf.PerfBlobBroadcast:
+			go pr.RunBlobBroadcast(pr.client.BaseURL, id)
+		case conf.PerfBlobPrivateMsg:
+			go pr.RunBlobPrivateMessage(pr.client.BaseURL, id)
 		}
 	}
 
@@ -212,14 +245,30 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, workerID, event.ID.String(), workerID, event.Reference)
 				}
 			default:
-				workerID, err = strconv.Atoi(strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", ""))
+				workerIDFromTag := ""
+				subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
+				if !ok {
+					return fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
+				}
+				switch subInfo.Job {
+				case conf.PerfBlobBroadcast, conf.PerfBlobPrivateMsg:
+					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
+				default:
+					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
+				}
+
+				workerID, err = strconv.Atoi(workerIDFromTag)
 				if err != nil {
 					log.Errorf("Could not parse message tag: %s", err)
 					b, _ := json.Marshal(&event)
 					log.Infof("Full event: %s", b)
 				}
+
 				pr.deleteMsgTime(event.Message.Header.ID.String())
-				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s", workerID, workerID, event.ID.String(), workerID, event.Message.Header.ID.String())
+				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
+				if subInfo.Job == conf.PerfBlobBroadcast {
+					pr.downloadAndVerifyBlob(subInfo.NodeURL, event.Message.Data[0].ID.String(), *event.Message.Data[0].Hash)
+				}
 			}
 
 			// Ack websocket event
@@ -271,6 +320,10 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 			case conf.PerfCmdCustomEthereumContract.String(), conf.PerfCmdCustomFabricContract.String():
 				json.Unmarshal(res.Body(), &contractRes)
 				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
+			case conf.PerfBlobBroadcast.String(), conf.PerfBlobPrivateMsg.String():
+				json.Unmarshal(res.Body(), &msgRes)
+				pr.updateMsgTime(msgRes.Header.ID.String())
+				log.Infof("%d --> Sent blob: %s", id, msgRes.Header.ID)
 			}
 			// Wait for worker to confirm the message before proceeding to next task
 			for i := 0; i < len(pr.nodeURLs); i++ {
@@ -283,11 +336,12 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 	}
 }
 
-func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
+func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, err error) {
+	var sub fftypes.Subscription
 	var readAhead uint16 = uint16(len(pr.wsReceivers))
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
-			Name:      pr.tagPrefix,
+			Name:      name,
 			Namespace: NAMESPACE,
 		},
 		Options: fftypes.SubscriptionOptions{
@@ -299,7 +353,7 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
 		Filter: fftypes.SubscriptionFilter{
 			Events: fftypes.EventTypeMessageConfirmed.String(),
 			Message: fftypes.MessageFilter{
-				Tag: fmt.Sprintf("^%s_", pr.tagPrefix),
+				Tag: tag,
 			},
 		},
 		Transport: TRANSPORT_TYPE,
@@ -311,15 +365,16 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL string) (err error) {
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
+		SetResult(&sub).
 		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", nodeURL))
 	if err != nil {
 		log.Errorf("Could not create subscription: %s", err)
-		return err
+		return "", err
 	}
 
 	log.Infof("Created subscription on %s: %s", nodeURL, pr.tagPrefix)
 
-	return nil
+	return sub.ID.String(), nil
 }
 
 func (pr *perfRunner) openWsClient(wsconn wsclient.WSClient) (err error) {
@@ -327,7 +382,10 @@ func (pr *perfRunner) openWsClient(wsconn wsclient.WSClient) (err error) {
 	if err := pr.startSubscription(wsconn, pr.tagPrefix); err != nil {
 		return err
 	}
-	if err := pr.startSubscription(wsconn, fmt.Sprintf("%s_contracts", pr.tagPrefix)); err != nil {
+	if err := pr.startSubscription(wsconn, fmt.Sprintf("blob_%s", pr.tagPrefix)); err != nil {
+		return err
+	}
+	if err := pr.startSubscription(wsconn, fmt.Sprintf("contracts_%s", pr.tagPrefix)); err != nil {
 		return err
 	}
 	return nil
@@ -487,10 +545,11 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 	return id, nil
 }
 
-func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (err error) {
+func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID string, err error) {
+	var sub fftypes.Subscription
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
-			Name:      fmt.Sprintf("%s_contracts", pr.tagPrefix),
+			Name:      fmt.Sprintf("contracts_%s", pr.tagPrefix),
 			Namespace: NAMESPACE,
 		},
 		Ephemeral: false,
@@ -509,13 +568,14 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (err error)
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
+		SetResult(&sub).
 		Post(fmt.Sprintf("%s/api/v1/namespaces/default/subscriptions", nodeURL))
 	if err != nil {
 		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
-		return err
+		return "", err
 	}
 
-	log.Infof("Created contracts subscription on %s: %s", nodeURL, fmt.Sprintf("%s_contracts", pr.tagPrefix))
+	log.Infof("Created contracts subscription on %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 
-	return nil
+	return sub.ID.String(), nil
 }
