@@ -1,7 +1,19 @@
-/*
-Copyright © 2022 NAME HERE <EMAIL ADDRESS>
+// Copyright © 2022 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-*/
 package cmd
 
 import (
@@ -18,8 +30,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var perfRunner perf.PerfRunner
-var runTestsConfig conf.PerfConfig
+var runTestsPerfRunner perf.PerfRunner
+var runTestsConfig conf.PerfRunnerConfig
 
 // runTestsCmd represents the run-tests command
 var runTestsCmd = &cobra.Command{
@@ -39,7 +51,7 @@ Executes the provided list of tests against a FireFly node to generate synthetic
 			HeartbeatInterval:      5 * time.Second,
 		}
 
-		if perfRunner == nil {
+		if runTestsPerfRunner == nil {
 			err := validateCommands(args)
 			if err != nil {
 				return err
@@ -62,7 +74,7 @@ Executes the provided list of tests against a FireFly node to generate synthetic
 				}
 			}
 
-			perfRunner = perf.New(&runTestsConfig)
+			runTestsPerfRunner = perf.New(&runTestsConfig)
 		}
 
 		return nil
@@ -73,11 +85,11 @@ Executes the provided list of tests against a FireFly node to generate synthetic
 }
 
 func runTests() error {
-	err := perfRunner.Init()
+	err := runTestsPerfRunner.Init()
 	if err != nil {
 		return err
 	}
-	return perfRunner.Start()
+	return runTestsPerfRunner.Start()
 }
 
 func init() {
@@ -100,10 +112,10 @@ func validateCommands(cmds []string) error {
 	cmdArr := []fftypes.FFEnum{}
 	cmdSet := make(map[fftypes.FFEnum]bool, 0)
 	for _, cmd := range cmds {
-		if val, ok := conf.ValidPerfCommands[cmd]; ok {
+		if val, ok := conf.ValidPerfTests[cmd]; ok {
 			cmdSet[val] = true
 		} else {
-			return fmt.Errorf("commands not valid. Choose from %v", conf.ValidCommandsString())
+			return fmt.Errorf("test commands not valid. Choose from %v", conf.ValidPerfTestsString())
 		}
 	}
 	for cmd := range cmdSet {
@@ -111,14 +123,14 @@ func validateCommands(cmds []string) error {
 	}
 
 	if len(cmdArr) == 0 {
-		return fmt.Errorf("must specify at least one command. Choose from %v", conf.ValidCommandsString())
+		return fmt.Errorf("must specify at least one command. Choose from %v", conf.ValidPerfTestsString())
 	}
-	runTestsConfig.Cmds = cmdArr
+	runTestsConfig.Tests = cmdArr
 
 	return nil
 }
 
-func validateConfig(cfg conf.PerfConfig) error {
+func validateConfig(cfg conf.PerfRunnerConfig) error {
 	if cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
 		return fmt.Errorf("invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String())
 	}
@@ -130,8 +142,8 @@ func readStackJSON(filename string) (*types.Stack, error) {
 		return nil, err
 	} else {
 		var stack *types.Stack
-		if err := json.Unmarshal(d, &stack); err == nil {
-			fmt.Printf("done\n")
+		if err := json.Unmarshal(d, &stack); err != nil {
+			return nil, err
 		}
 		return stack, nil
 	}

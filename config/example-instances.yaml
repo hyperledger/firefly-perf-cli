@@ -1,0 +1,18 @@
+stackJSONPath:
+
+websocketConfig:
+  readBufferSize: 16000
+  writeBufferSize: 16000
+  initialDelay: 250000000
+  maximumDelay: 30000000000
+  initialConnectAttempts: 5
+
+instances:
+  - name: ff1-ff2
+    test: msg_broadcast
+    length: 3m
+    recipient: ff2
+    recipientAddress: ...
+    workers: 30
+    messageOptions:
+      longMessage: true
