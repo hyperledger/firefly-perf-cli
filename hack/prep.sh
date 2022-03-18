@@ -114,7 +114,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
     JOBS="$JOBS token_mint custom_ethereum_contract"
     cat <<EOF >> $BASE_PATH/instances.yaml
-  - name: ff1-ff2-mint
+  - name: ff0-ff1-mint
     test: token_mint
     length: 5m
     recipient: ${ORG_IDENTITY}
@@ -122,7 +122,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     workers: 10
     tokenOptions:
       tokenType: fungible
-  - name: ff1-ff2-contract
+  - name: ff0-ff1-contract
     test: custom_ethereum_contract
     length: 5m
     recipient: ${ORG_IDENTITY}
@@ -137,7 +137,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
     docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
     output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
     cat <<EOF >> $BASE_PATH/instances.yaml
-  - name: ff1-ff2-contract
+  - name: ff0-ff1-contract
     test: custom_fabric_contract
     length: 5m
     recipient: ${ORG_IDENTITY}
