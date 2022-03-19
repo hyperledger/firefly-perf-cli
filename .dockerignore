@@ -1,0 +1,16 @@
+.github/
+hack/
+.gitignore
+.goreleaser.yml
+CODEOWNERS
+main
+.DS_Store
+ffperf/ffperf
+ffperf.log
+.vscode
+dist/
+*.iml
+.idea/
+*.md
+grafanaDashboard.json
+config/

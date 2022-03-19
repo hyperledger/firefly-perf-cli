@@ -25,7 +25,6 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"path"
 )
@@ -41,7 +40,7 @@ var runCmd = &cobra.Command{
 	Use:   "run",
 	Short: "Executes a instance within a performance test suite to generate synthetic load across multiple FireFly nodes within a network",
 	Long: GetFireflyAsciiArt() + `
-Executes a instance within a performance test suite to generate synthetic load across multiple FireFly nodes within a network"
+Executes a instance within a performance test suite to generate synthetic load across multiple FireFly nodes within a network
 	`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		config, err := loadPerfConfig(configFilePath)
