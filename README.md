@@ -8,7 +8,7 @@ FireFly Performance CLI is a HTTP load testing tool that generates a constant re
 - [x] Private Messaging (`POST /messages/private`)
 - [x] Mint Tokens (`POST /tokens/mint`)
 - [x] Fungible vs. Non-Fungible Token Toggle
-- [ ] Blobs
+- [x] Blobs
 
 ## Run a test
 
