@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -244,6 +245,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 				} else {
 					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, workerID, event.ID.String(), workerID, event.Reference)
 				}
+				pr.deleteMsgTime(strconv.Itoa(workerID))
 			default:
 				workerIDFromTag := ""
 				subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
@@ -315,10 +317,11 @@ func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int
 				log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
 			case conf.PerfCmdTokenMint.String():
 				json.Unmarshal(res.Body(), &tokenRes)
-				pr.updateMsgTime(tokenRes.LocalID.String())
+				pr.updateMsgTime(tokenRes.Message.String())
 				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
 			case conf.PerfCmdCustomEthereumContract.String(), conf.PerfCmdCustomFabricContract.String():
 				json.Unmarshal(res.Body(), &contractRes)
+				pr.updateMsgTime(strconv.Itoa(id))
 				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
 			case conf.PerfBlobBroadcast.String(), conf.PerfBlobPrivateMsg.String():
 				json.Unmarshal(res.Body(), &msgRes)
@@ -444,6 +447,9 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
+	if len(delinquentMsgs) > 0 {
+		os.Exit(1)
+	}
 }
 
 func (pr *perfRunner) updateMsgTime(msgId string) {
