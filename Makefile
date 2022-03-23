@@ -28,7 +28,7 @@ install: ## Installs the package
 		cd ffperf && go install
 
 docker:
-	docker build --build-arg BUILD_VERSION=$(VERSION) . -t ghcr.io/hyperledger/firefly-perf-cli
+	docker build --platform linux/amd64 --build-arg BUILD_VERSION=$(VERSION) . -t ghcr.io/hyperledger/firefly-perf-cli
 
 lint: ${LINT} ## Checks and reports lint errors
 		GOGC=20 $(LINT) run -v --timeout 5m
