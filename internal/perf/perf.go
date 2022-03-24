@@ -42,7 +42,6 @@ var TRANSPORT_TYPE = "websockets"
 type PerfRunner interface {
 	Init() error
 	Start() error
-<<<<<<< HEAD
 }
 
 type TrackingIDType string
@@ -63,15 +62,6 @@ type TestCase interface {
 type inflightTest struct {
 	time     time.Time
 	testCase TestCase
-=======
-	// Data
-	RunBroadcast(nodeURL string, id int)
-	RunPrivateMessage(nodeURL string, id int)
-	// Tokens
-	CreateTokenPool() error
-	RunTokenMint(nodeURL string, id int)
-	IsDaemon() bool
->>>>>>> e26df41 (Daemon Mode (#1))
 }
 
 type perfRunner struct {
@@ -272,6 +262,15 @@ perfLoop:
 	}
 
 	pr.shutdown <- true
+	log.Info("Perf tests stopping...")
+
+	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
+	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
+	// one last time so metrics are up-to-date
+	log.Warn("Runner stopping in 30s")
+	time.Sleep(10 * time.Second)
+	pr.getDelinquentMsgs()
+	time.Sleep(20 * time.Second)
 
 	return nil
 }
@@ -501,7 +500,8 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
-	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() && !pr.daemon {
+
+	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 		os.Exit(1)
 	}
 }
