@@ -95,7 +95,7 @@ func init() {
 	runCmd.Flags().StringVarP(&instanceName, "instance-name", "n", "", "Instance within performance config to run against the network")
 	runCmd.Flags().IntVarP(&instanceIndex, "instance-idx", "i", -1, "Index of the instance within performance config to run against the network")
 	runCmd.Flags().BoolVarP(&daemonOverride, "daemon", "d", false, "Run in long-lived, daemon mode. Any provided test length is ignored.")
-	runTestsCmd.Flags().StringVarP(&deliquentAction, "delinquent", "", "exit", "Action to take when delinquent messages are detected. Valid options: [exit log]")
+	runCmd.Flags().StringVarP(&deliquentAction, "delinquent", "", "exit", "Action to take when delinquent messages are detected. Valid options: [exit log]")
 
 	runCmd.MarkFlagRequired("config")
 }
