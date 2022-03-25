@@ -52,7 +52,7 @@ instances: []
 daemonModeEnabled: false
 
 image:
-  repository: ghcr.io/hyperledger/ffperf-cli
+  repository: ghcr.io/hyperledger/firefly-perf-cli
   pullPolicy: Always  # TODO
   # Overrides the image tag whose default is the chart appVersion.
   tag: "v0.0.1-alpha"  # TODO
