@@ -447,7 +447,7 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
-	if len(delinquentMsgs) > 0 {
+	if len(delinquentMsgs) > 0 && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 		os.Exit(1)
 	}
 }
