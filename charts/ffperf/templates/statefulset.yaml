@@ -38,6 +38,7 @@ spec:
       labels:
         {{- include "ffperf.selectorLabels" . | nindent 8 }}
     spec:
+      terminationGracePeriodSeconds: 60
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

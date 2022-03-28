@@ -46,6 +46,7 @@ spec:
         {{- include "ffperf.selectorLabels" $root | nindent 8 }}
         hyperledger.io/ffperf-instance: {{ .name }}
     spec:
+      terminationGracePeriodSeconds: 60
       {{- with $root.Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
