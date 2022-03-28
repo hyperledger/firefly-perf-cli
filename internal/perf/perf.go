@@ -249,12 +249,14 @@ perfLoop:
 	for pr.daemon || time.Now().Unix() < pr.endTime {
 		select {
 		case <-signalCh:
-			pr.getDelinquentMsgs()
+			pr.detectDeliquentMsgs()
 			break perfLoop
 		case pr.bfr <- i:
 			i++
 			if time.Since(lastCheckedTime).Seconds() > 60 {
-				pr.getDelinquentMsgs()
+				if pr.detectDeliquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					break perfLoop
+				}
 				lastCheckedTime = time.Now()
 			}
 			break
@@ -269,7 +271,7 @@ perfLoop:
 	// one last time so metrics are up-to-date
 	log.Warn("Runner stopping in 30s")
 	time.Sleep(10 * time.Second)
-	pr.getDelinquentMsgs()
+	pr.detectDeliquentMsgs()
 	time.Sleep(20 * time.Second)
 
 	return nil
@@ -479,7 +481,7 @@ func getFFClient(node string) *resty.Client {
 	return client
 }
 
-func (pr *perfRunner) getDelinquentMsgs() {
+func (pr *perfRunner) detectDeliquentMsgs() bool {
 	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
 	for trackingID, inflight := range pr.msgTimeMap {
@@ -489,21 +491,15 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 	mutex.Unlock()
 
-	if len(delinquentMsgs) == 0 {
-		return
-	}
-
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
 		log.Errorf("Error printing delinquent messages: %s", err)
-		return
+		return len(delinquentMsgs) > 0
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
 
-	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-		os.Exit(1)
-	}
+	return len(delinquentMsgs) > 0
 }
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
