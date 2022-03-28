@@ -7,12 +7,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"time"
+
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/hyperledger/firefly-perf-cli/internal/types"
 	"github.com/hyperledger/firefly/pkg/fftypes"
-	"io/ioutil"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -91,6 +92,7 @@ func init() {
 	runTestsCmd.Flags().StringVarP(&runTestsConfig.ContractOptions.Channel, "channel", "", "", "Fabric channel for custom contract")
 	runTestsCmd.Flags().StringVarP(&runTestsConfig.ContractOptions.Chaincode, "chaincode", "", "", "Chaincode name for custom contract")
 	runTestsCmd.Flags().StringVarP(&runTestsConfig.StackJSONPath, "stackJSON", "s", "", "Path to stack.json file that describes the network to test")
+	runTestsCmd.Flags().StringVarP(&runTestsConfig.DelinquentAction, "delinquent", "", "exit", "Action to take when delinquent messages are detected. Valid options: [exit log]")
 }
 
 func validateCommands(cmds []string) error {

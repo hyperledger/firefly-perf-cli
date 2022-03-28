@@ -35,6 +35,7 @@ type PerfConfig struct {
 	Workers          int
 	NodeURLs         []string
 	StackJSONPath    string
+	DelinquentAction string
 }
 
 type FireFlyWsConf struct {
@@ -76,6 +77,13 @@ var (
 	PerfBlobBroadcast fftypes.FFEnum = "blob_broadcast"
 	// PerfBlobBroadcast broadcasts a blob
 	PerfBlobPrivateMsg fftypes.FFEnum = "blob_private"
+)
+
+var (
+	// DelinquentActionExit causes ffperf to exit after detecting delinquent messages
+	DelinquentActionExit fftypes.FFEnum = "exit"
+	// DelinquentActionLog causes ffperf to log and move on after delinquent messages
+	DelinquentActionLog fftypes.FFEnum = "log"
 )
 
 var ValidPerfCommands = map[string]fftypes.FFEnum{
