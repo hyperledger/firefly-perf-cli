@@ -66,7 +66,7 @@ spec:
               #!/bin/sh
               export INSTANCE_IDX=${HOSTNAME##*-}
 
-              ffperf run --config /etc/firefly-perf-cli/instances.yaml --instance-name {{ .name }} --daemon
+              ffperf run --delinquent log --config /etc/firefly-perf-cli/instances.yaml --instance-name {{ .name }} --daemon
           ports:
             - name: http
               containerPort: 5050
