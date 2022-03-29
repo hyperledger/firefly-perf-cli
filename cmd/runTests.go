@@ -33,9 +33,10 @@ Executes the provided list of tests against a FireFly node to generate synthetic
 			WSPath:                 "/ws",
 			ReadBufferSize:         16000,
 			WriteBufferSize:        16000,
-			InitialDelay:           250000000,
-			MaximumDelay:           30000000000,
+			InitialDelay:           250 * time.Millisecond,
+			MaximumDelay:           30 * time.Second,
 			InitialConnectAttempts: 5,
+			HeartbeatInterval:      5 * time.Second,
 		}
 
 		if perfRunner == nil {

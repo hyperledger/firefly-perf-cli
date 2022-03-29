@@ -46,6 +46,7 @@ type FireFlyWsConf struct {
 	InitialDelay           time.Duration `mapstructure:"initialDelay"`
 	MaximumDelay           time.Duration `mapstructure:"maximumDelay"`
 	InitialConnectAttempts int           `mapstructure:"initialConnectAttempts"`
+	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval"`
 }
 
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
@@ -59,6 +60,7 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
 		InitialDelay:           conf.InitialDelay,
 		MaximumDelay:           conf.MaximumDelay,
 		InitialConnectAttempts: conf.InitialConnectAttempts,
+		HeartbeatInterval:      conf.HeartbeatInterval,
 	}
 }
 
