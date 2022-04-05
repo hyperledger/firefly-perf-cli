@@ -131,7 +131,7 @@ firefly:
           storageClassName: io2
           resources:
             requests:
-              storage: 10Gi
+              storage: 50Gi
       - metadata:
           name: postgres
         spec:
@@ -140,7 +140,7 @@ firefly:
           storageClassName: io2
           resources:
             requests:
-              storage: 10Gi
+              storage: 50Gi
 
   dataexchange:
     enabled: true
