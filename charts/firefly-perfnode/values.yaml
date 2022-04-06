@@ -21,7 +21,7 @@ firefly:
   fullnameOverride: ""
 
   # only set this after the first perfnode has been deployed
-  # use `kubectl exec ... -- /bin/sh -c 'ipfs id' | jq '.Addresses'`
+  # use `kubectl exec ... -- /bin/sh -c 'ipfs id' | jq -r '.Addresses[0]'`
   ipfs:
     bootstrap: ""
 
@@ -85,6 +85,13 @@ firefly:
           - mountPath: /data/ipfs
             name: ipfs
             subPath: data
+        resources:
+          requests:
+            memory: 2Gi
+            cpu: 500m
+          limits:
+            memory: 2Gi
+            cpu: 2000m
         ports:
           - containerPort: 4001
             protocol: TCP
@@ -112,6 +119,13 @@ firefly:
           - containerPort: 5432
             protocol: TCP
             name: psql
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 1000m
+          limits:
+            memory: 4Gi
+            cpu: 2000m
         livenessProbe:
           exec:
             command:

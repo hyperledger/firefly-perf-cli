@@ -20,7 +20,7 @@ description: |
   A Helm chart for deploying FireFly nodes configured for performance testing flows between members.
 type: application
 version: 0.1.0
-appVersion: "0.14.0"
+appVersion: "0.14.1"
 
 maintainers:
   - name: hfuss
