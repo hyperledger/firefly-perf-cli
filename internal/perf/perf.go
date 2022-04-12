@@ -497,8 +497,9 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 					}
 				}
 			]
-		}
-	}`, pr.cfg.ContractOptions.Address)
+		},
+		"topic": ["%s"]
+	}`, pr.cfg.ContractOptions.Address, fftypes.NewUUID())
 
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
@@ -528,8 +529,9 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 		},
 		"event": {
 			"name": "AssetCreated"
-		}
-	}`, pr.cfg.ContractOptions.Channel, pr.cfg.ContractOptions.Chaincode)
+		},
+		"topic": ["%s"]
+	}`, pr.cfg.ContractOptions.Channel, pr.cfg.ContractOptions.Chaincode, fftypes.NewUUID())
 
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
