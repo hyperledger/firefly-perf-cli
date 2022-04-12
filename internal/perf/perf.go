@@ -498,7 +498,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 				}
 			]
 		},
-		"topic": ["%s"]
+		"topic": "%s"
 	}`, pr.cfg.ContractOptions.Address, fftypes.NewUUID())
 
 	res, err := pr.client.R().
@@ -530,7 +530,7 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 		"event": {
 			"name": "AssetCreated"
 		},
-		"topic": ["%s"]
+		"topic": "%s"
 	}`, pr.cfg.ContractOptions.Channel, pr.cfg.ContractOptions.Chaincode, fftypes.NewUUID())
 
 	res, err := pr.client.R().
