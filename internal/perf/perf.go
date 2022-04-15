@@ -57,7 +57,7 @@ type perfRunner struct {
 	shutdown        chan bool
 	tagPrefix       string
 	wsconns         map[string]wsclient.WSClient
-	wsReceivers     []chan bool
+	wsReceivers     []chan string
 	wsUUID          fftypes.UUID
 	nodeURLs        []string
 	subscriptionMap map[string]SubscriptionInfo
@@ -72,9 +72,9 @@ func New(config *conf.PerfConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 
 	// Create channel based dispatch for workers
-	var wsReceivers []chan bool
+	var wsReceivers []chan string
 	for i := 0; i < config.Workers; i++ {
-		wsReceivers = append(wsReceivers, make(chan bool))
+		wsReceivers = append(wsReceivers, make(chan string))
 	}
 
 	wsconns := make(map[string]wsclient.WSClient)
@@ -209,7 +209,7 @@ func (pr *perfRunner) Start() (err error) {
 		go func() {
 			err := pr.runLoop(tc)
 			if err != nil {
-				log.Errorf("Worker %d failed: %s", id, err)
+				log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
 			}
 		}()
 	}
@@ -246,7 +246,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 
 			workerID := -1
 
-			var inflightTest TestCase
 			switch event.Type {
 			case fftypes.EventTypeBlockchainEventReceived:
 				if event.BlockchainEvent == nil {
@@ -268,7 +267,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				} else {
 					log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Reference)
 				}
-				inflightTest = pr.inFlightComplete(strconv.Itoa(workerID))
 			default:
 				workerIDFromTag := ""
 				subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
@@ -289,7 +287,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					log.Infof("Full event: %s", b)
 				}
 
-				inflightTest = pr.inFlightComplete(event.Message.Header.ID.String())
 				log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
 			}
 
@@ -307,7 +304,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
 			if workerID >= 0 {
-				pr.wsReceivers[workerID] <- true
+				pr.wsReceivers[workerID] <- nodeURL
 			}
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
@@ -336,6 +333,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				<-pr.wsReceivers[workerID]
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
+			pr.markTestComplete(trackingID)
 			loop++
 		case <-pr.shutdown:
 			return nil
@@ -467,15 +465,10 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) inFlightComplete(trackingID string) TestCase {
+func (pr *perfRunner) markTestComplete(trackingID string) {
 	mutex.Lock()
-	inflight := pr.msgTimeMap[trackingID]
 	delete(pr.msgTimeMap, trackingID)
 	mutex.Unlock()
-	if inflight != nil {
-		return inflight.testCase
-	}
-	return nil
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {

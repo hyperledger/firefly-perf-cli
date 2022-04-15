@@ -42,7 +42,7 @@ func (tc *tokenMint) RunOnce() (string, error) {
 					"tag": "%s"
 				}
 			}
-		}`, tc.pr.poolName, tc.pr.cfg.RecipientAddress, tc.WorkerID, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.WorkerID))
+		}`, tc.pr.poolName, tc.pr.cfg.RecipientAddress, tc.workerID, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resTransfer fftypes.TokenTransfer
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

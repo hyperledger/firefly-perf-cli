@@ -31,12 +31,12 @@ func (t *testBase) getMessageString(isLongMsg bool) string {
 	str := ""
 	if isLongMsg {
 		for i := 0; i < 100000; i++ {
-			str = fmt.Sprintf("%s%d", str, t.WorkerID)
+			str = fmt.Sprintf("%s%d", str, t.workerID)
 		}
 		return str
 	}
 	for i := 0; i < 1000; i++ {
-		str = fmt.Sprintf("%s%d", str, t.WorkerID)
+		str = fmt.Sprintf("%s%d", str, t.workerID)
 	}
 	return str
 }
