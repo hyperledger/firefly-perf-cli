@@ -442,6 +442,11 @@ func (pr *perfRunner) getDelinquentMsgs() {
 		}
 	}
 	mutex.Unlock()
+
+	if len(delinquentMsgs) == 0 {
+		return
+	}
+
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
 		log.Errorf("Error printing delinquent messages: %s", err)
@@ -449,7 +454,7 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
-	if len(delinquentMsgs) > 0 && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 		os.Exit(1)
 	}
 }
