@@ -65,7 +65,7 @@ cd $BASE_PATH
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
 if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
-    output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | grep address)
+    output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | jq -r '.address')
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
