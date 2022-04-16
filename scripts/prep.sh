@@ -59,7 +59,7 @@ ff start $NEW_STACK_NAME --verbose --no-rollback
 
 # Get org identity
 ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
-ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[0].address')
+ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[0].account.address')
 cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
