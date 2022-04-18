@@ -161,6 +161,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.WebSocket = perfConfig.WSConfig
 	runnerConfig.Daemon = perfConfig.Daemon
 	runnerConfig.DelinquentAction = deliquentAction
+	runnerConfig.Sender = instance.Sender
 
 	err := validateConfig(*runnerConfig)
 	if err != nil {
@@ -168,14 +169,22 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	}
 
 	if runnerConfig.StackJSONPath == "" {
-		runnerConfig.NodeURLs = []string{"http://localhost:5000"}
+		runnerConfig.Nodes = map[string]conf.Node{
+			"did:firefly:node/node_0": {
+				DID:     "did:firefly:node/node_0",
+				URL:     "http://localhost:5000",
+				Name:    "node_0",
+				OrgDID:  "did:firefly:org/org_0",
+				OrgName: "org_0",
+			},
+		}
 	} else {
 		stack, err := readStackJSON(runnerConfig.StackJSONPath)
 		if err != nil {
 			return nil, err
 		}
-		runnerConfig.NodeURLs = make([]string, len(stack.Members))
-		for i, member := range stack.Members {
+		runnerConfig.Nodes = make(map[string]conf.Node, len(stack.Members))
+		for _, member := range stack.Members {
 			if member.FireflyHostname == "" {
 				member.FireflyHostname = "localhost"
 			}
@@ -184,8 +193,17 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 				scheme = "https"
 			}
 
-			// TODO support username / passwords ? ideally isn't embedded into the URL itself but set as a header
-			runnerConfig.NodeURLs[i] = fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort)
+			did := fmt.Sprintf("did:firefly:node/%s", member.NodeName)
+
+			runnerConfig.Nodes[did] = conf.Node{
+				DID:      did,
+				URL:      fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort),
+				Name:     member.NodeName,
+				OrgName:  member.OrgName,
+				OrgDID:   fmt.Sprintf("did:firefly:org/%s", member.OrgName),
+				Username: member.Username,
+				Password: member.Password,
+			}
 		}
 	}
 

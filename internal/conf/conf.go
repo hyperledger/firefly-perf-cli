@@ -49,10 +49,11 @@ type PerfRunnerConfig struct {
 	ContractOptions  ContractOptions
 	WebSocket        FireFlyWsConf
 	Workers          int
-	NodeURLs         []string
+	Nodes            map[string]Node
 	StackJSONPath    string
 	DelinquentAction string
 	Daemon           bool
+	Sender           string
 }
 
 type PerformanceTestConfig struct {
@@ -67,11 +68,22 @@ type InstanceConfig struct {
 	Test             fftypes.FFEnum  `yaml:"test" json:"test"`
 	Length           time.Duration   `yaml:"length" json:"length"`
 	MessageOptions   MessageOptions  `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Recipient        string          `json:"recipient" yaml:"recipient"`
-	RecipientAddress string          `json:"recipientAddress" yaml:"recipientAddress"`
+	Sender           string          `json:"sender" yaml:"sender"`
+	Recipient        string          `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	RecipientAddress string          `json:"recipientAddress,omitempty" yaml:"recipientAddress,omitempty"`
 	TokenOptions     TokenOptions    `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
 	ContractOptions  ContractOptions `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
 	Workers          int             `json:"workers" yaml:"workers"`
+}
+
+type Node struct {
+	URL      string
+	DID      string
+	Name     string
+	OrgName  string
+	OrgDID   string
+	Username string
+	Password string
 }
 
 type FireFlyWsConf struct {
