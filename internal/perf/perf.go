@@ -24,12 +24,26 @@ var TRANSPORT_TYPE = "websockets"
 type PerfRunner interface {
 	Init() error
 	Start() error
-	// Data
-	RunBroadcast(nodeURL string, id int)
-	RunPrivateMessage(nodeURL string, id int)
-	// Tokens
-	CreateTokenPool() error
-	RunTokenMint(nodeURL string, id int)
+}
+
+type TrackingIDType string
+
+const (
+	TrackingIDTypeMessageID    TrackingIDType = "Message ID"
+	TrackingIDTypeTransferID   TrackingIDType = "Token Transfer ID"
+	TrackingIDTypeWorkerNumber                = "Worker ID"
+)
+
+type TestCase interface {
+	WorkerID() int
+	RunOnce() (trackingID string, err error)
+	IDType() TrackingIDType
+	Name() string
+}
+
+type inflightTest struct {
+	time     time.Time
+	testCase TestCase
 }
 
 type perfRunner struct {
@@ -38,12 +52,12 @@ type perfRunner struct {
 	client          *resty.Client
 	ctx             context.Context
 	endTime         int64
-	msgTimeMap      map[string]time.Time
+	msgTimeMap      map[string]*inflightTest
 	poolName        string
 	shutdown        chan bool
 	tagPrefix       string
-	wsconns         []wsclient.WSClient
-	wsReceivers     []chan bool
+	wsconns         map[string]wsclient.WSClient
+	wsReceivers     []chan string
 	wsUUID          fftypes.UUID
 	nodeURLs        []string
 	subscriptionMap map[string]SubscriptionInfo
@@ -58,21 +72,21 @@ func New(config *conf.PerfConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 
 	// Create channel based dispatch for workers
-	var wsReceivers []chan bool
+	var wsReceivers []chan string
 	for i := 0; i < config.Workers; i++ {
-		wsReceivers = append(wsReceivers, make(chan bool))
+		wsReceivers = append(wsReceivers, make(chan string))
 	}
 
-	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
+	wsconns := make(map[string]wsclient.WSClient)
 
-	for i, nodeURL := range config.NodeURLs {
+	for _, nodeURL := range config.NodeURLs {
 		// Create websocket client
 		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
 		wsconn, err := wsclient.New(context.Background(), wsConfig, nil, nil)
 		if err != nil {
 			log.Error("Could not create websocket connection: %s", err)
 		}
-		wsconns[i] = wsconn
+		wsconns[nodeURL] = wsconn
 	}
 
 	wsUUID := *fftypes.NewUUID()
@@ -85,7 +99,7 @@ func New(config *conf.PerfConfig) PerfRunner {
 		poolName:        poolName,
 		shutdown:        make(chan bool),
 		tagPrefix:       fmt.Sprintf("perf_%s", wsUUID.String()),
-		msgTimeMap:      make(map[string]time.Time),
+		msgTimeMap:      make(map[string]*inflightTest),
 		wsconns:         wsconns,
 		wsReceivers:     wsReceivers,
 		wsUUID:          wsUUID,
@@ -163,33 +177,41 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	// Open websocket clients for all subscriptions
-	for _, wsconn := range pr.wsconns {
+	for nodeURL, wsconn := range pr.wsconns {
 		err = pr.openWsClient(wsconn)
 		if err != nil {
 			return err
 		}
-		go pr.eventLoop(wsconn)
+		go pr.eventLoop(nodeURL, wsconn)
 	}
 
 	for id := 0; id < pr.cfg.Workers; id++ {
 		ptr := id % len(pr.cfg.Cmds)
+		var tc TestCase
 
 		switch pr.cfg.Cmds[ptr] {
 		case conf.PerfCmdBroadcast:
-			go pr.RunBroadcast(pr.client.BaseURL, id)
+			tc = newBroadcastTestWorker(pr, id)
 		case conf.PerfCmdPrivateMsg:
-			go pr.RunPrivateMessage(pr.client.BaseURL, id)
+			tc = newPrivateTestWorker(pr, id)
 		case conf.PerfCmdTokenMint:
-			go pr.RunTokenMint(pr.client.BaseURL, id)
+			tc = newTokenMintTestWorker(pr, id)
 		case conf.PerfCmdCustomEthereumContract:
-			go pr.RunCustomEthereumContract(pr.client.BaseURL, id)
+			tc = newCustomEthereumTestWorker(pr, id)
 		case conf.PerfCmdCustomFabricContract:
-			go pr.RunCustomFabricContract(pr.client.BaseURL, id)
+			tc = newCustomFabricTestWorker(pr, id)
 		case conf.PerfBlobBroadcast:
-			go pr.RunBlobBroadcast(pr.client.BaseURL, id)
+			tc = newBlobBroadcastTestWorker(pr, id)
 		case conf.PerfBlobPrivateMsg:
-			go pr.RunBlobPrivateMessage(pr.client.BaseURL, id)
+			tc = newBlobPrivateTestWorker(pr, id)
 		}
+
+		go func() {
+			err := pr.runLoop(tc)
+			if err != nil {
+				log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
+			}
+		}()
 	}
 
 	i := 0
@@ -208,8 +230,8 @@ func (pr *perfRunner) Start() (err error) {
 	return nil
 }
 
-func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
-	log.Infoln("Event loop started...")
+func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
+	log.Infof("Event loop started for %s...", nodeURL)
 	for {
 		select {
 		// Wait to receive websocket event
@@ -243,9 +265,8 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 					b, _ := json.Marshal(&event)
 					log.Infof("Full event: %s", b)
 				} else {
-					log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, workerID, event.ID.String(), workerID, event.Reference)
+					log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Reference)
 				}
-				pr.deleteMsgTime(strconv.Itoa(workerID))
 			default:
 				workerIDFromTag := ""
 				subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
@@ -266,11 +287,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 					log.Infof("Full event: %s", b)
 				}
 
-				pr.deleteMsgTime(event.Message.Header.ID.String())
-				log.Infof("\n\t%d - Received \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
-				if subInfo.Job == conf.PerfBlobBroadcast {
-					pr.downloadAndVerifyBlob(subInfo.NodeURL, event.Message.Data[0].ID.String(), *event.Message.Data[0].Hash)
-				}
+				log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
 			}
 
 			// Ack websocket event
@@ -287,7 +304,7 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 			wsconn.Send(pr.ctx, ackJSON)
 			// Release worker so it can continue to its next task
 			if workerID >= 0 {
-				pr.wsReceivers[workerID] <- true
+				pr.wsReceivers[workerID] <- nodeURL
 			}
 		case <-pr.ctx.Done():
 			log.Errorf("Run loop exiting (context cancelled)")
@@ -296,43 +313,28 @@ func (pr *perfRunner) eventLoop(wsconn wsclient.WSClient) (err error) {
 	}
 }
 
-func (pr *perfRunner) sendAndWait(req *resty.Request, nodeURL, ep string, id int, action string) error {
+func (pr *perfRunner) runLoop(tc TestCase) error {
+	idType := tc.IDType()
+	testName := tc.Name()
+	workerID := tc.WorkerID()
+	loop := 0
 	for {
 		select {
 		case <-pr.bfr:
-			// Worker sends its task
-			res, err := req.Post(fmt.Sprintf("%s/api/v1/namespaces/default/%s", nodeURL, ep))
+			trackingID, err := tc.RunOnce()
 			if err != nil {
-				log.Errorf("Error sending POST /%s: %s", ep, err)
+				return err
 			}
-			// Parse response for logging purposes
-			var msgRes fftypes.Message
-			var tokenRes fftypes.TokenTransfer
-			var contractRes fftypes.ContractCallResponse
+			pr.markTestInFlight(tc, trackingID)
+			log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
 
-			switch action {
-			case conf.PerfCmdBroadcast.String(), conf.PerfCmdPrivateMsg.String():
-				json.Unmarshal(res.Body(), &msgRes)
-				pr.updateMsgTime(msgRes.Header.ID.String())
-				log.Infof("%d --> %s Sent with Message ID: %s", id, action, msgRes.Header.ID)
-			case conf.PerfCmdTokenMint.String():
-				json.Unmarshal(res.Body(), &tokenRes)
-				pr.updateMsgTime(tokenRes.Message.String())
-				log.Infof("%d --> %s Sent with Token ID: %s", id, action, tokenRes.LocalID)
-			case conf.PerfCmdCustomEthereumContract.String(), conf.PerfCmdCustomFabricContract.String():
-				json.Unmarshal(res.Body(), &contractRes)
-				pr.updateMsgTime(strconv.Itoa(id))
-				log.Infof("%d --> Invoked contract: %s", id, contractRes.ID)
-			case conf.PerfBlobBroadcast.String(), conf.PerfBlobPrivateMsg.String():
-				json.Unmarshal(res.Body(), &msgRes)
-				pr.updateMsgTime(msgRes.Header.ID.String())
-				log.Infof("%d --> Sent blob: %s", id, msgRes.Header.ID)
-			}
 			// Wait for worker to confirm the message before proceeding to next task
 			for i := 0; i < len(pr.nodeURLs); i++ {
-				<-pr.wsReceivers[id]
+				<-pr.wsReceivers[workerID]
 			}
-			log.Infof("%d <-- %s Finished", id, action)
+			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
+			pr.markTestComplete(trackingID)
+			loop++
 		case <-pr.shutdown:
 			return nil
 		}
@@ -434,12 +436,17 @@ func getFFClient(node string) *resty.Client {
 func (pr *perfRunner) getDelinquentMsgs() {
 	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
-	for msgId, timeLastSeen := range pr.msgTimeMap {
-		if time.Since(timeLastSeen).Seconds() > 60 {
-			delinquentMsgs[msgId] = timeLastSeen
+	for trackingID, inflight := range pr.msgTimeMap {
+		if time.Since(inflight.time).Seconds() > 60 {
+			delinquentMsgs[trackingID] = inflight.time
 		}
 	}
 	mutex.Unlock()
+
+	if len(delinquentMsgs) == 0 {
+		return
+	}
+
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
 		log.Errorf("Error printing delinquent messages: %s", err)
@@ -447,22 +454,25 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
-	if len(delinquentMsgs) > 0 && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 		os.Exit(1)
 	}
 }
 
-func (pr *perfRunner) updateMsgTime(msgId string) {
+func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Lock()
-	if len(msgId) > 0 {
-		pr.msgTimeMap[msgId] = time.Now()
+	if len(trackingID) > 0 {
+		pr.msgTimeMap[trackingID] = &inflightTest{
+			testCase: tc,
+			time:     time.Now(),
+		}
 	}
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) deleteMsgTime(msgId string) {
+func (pr *perfRunner) markTestComplete(trackingID string) {
 	mutex.Lock()
-	delete(pr.msgTimeMap, msgId)
+	delete(pr.msgTimeMap, trackingID)
 	mutex.Unlock()
 }
 

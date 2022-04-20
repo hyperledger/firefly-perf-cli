@@ -7,39 +7,41 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly/pkg/fftypes"
 )
 
-func (pr *perfRunner) RunBlobBroadcast(nodeURL string, id int) {
-
-	blob, hash := pr.generateBlob(big.NewInt(1024))
-	dataID, err := pr.uploadBlob(blob, hash, nodeURL)
-	if err != nil {
-		fmt.Print(err)
-		return
-	}
-
-	payload := fmt.Sprintf(`{
-		"data":[
-		   {
-			   "id": "%s"
-		   }
-		],
-		"header":{
-		   "tag": "%s"
-		}
-	 }`, dataID, fmt.Sprintf("blob_%s_%d", pr.tagPrefix, id))
-	req := pr.client.R().
-		SetHeaders(map[string]string{
-			"Accept":       "application/json",
-			"Content-Type": "application/json",
-		}).
-		SetBody([]byte(payload))
-	pr.sendAndWait(req, nodeURL, "messages/broadcast", id, conf.PerfBlobBroadcast.String())
+type testBase struct {
+	pr       *perfRunner
+	workerID int
 }
 
-func (pr *perfRunner) generateBlob(length *big.Int) ([]byte, [32]byte) {
+func (t *testBase) WorkerID() int {
+	return t.workerID
+}
+
+func resStatus(res *resty.Response) int {
+	if res == nil {
+		return -1
+	}
+	return res.StatusCode()
+}
+
+func (t *testBase) getMessageString(isLongMsg bool) string {
+	str := ""
+	if isLongMsg {
+		for i := 0; i < 100000; i++ {
+			str = fmt.Sprintf("%s%d", str, t.workerID)
+		}
+		return str
+	}
+	for i := 0; i < 1000; i++ {
+		str = fmt.Sprintf("%s%d", str, t.workerID)
+	}
+	return str
+}
+
+func (t *testBase) generateBlob(length *big.Int) ([]byte, [32]byte) {
 	r, _ := rand.Int(rand.Reader, length)
 	blob := make([]byte, r.Int64()+length.Int64())
 	for i := 0; i < len(blob); i++ {
@@ -49,14 +51,14 @@ func (pr *perfRunner) generateBlob(length *big.Int) ([]byte, [32]byte) {
 	return blob, blobHash
 }
 
-func (pr *perfRunner) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (string, error) {
+func (t *testBase) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (string, error) {
 	var data fftypes.Data
 	formData := map[string]string{}
 	// If there's no datatype, tell FireFly to automatically add a data payload
 	formData["autometa"] = "true"
 	formData["metadata"] = `{"mymeta": "data"}`
 
-	resp, err := pr.client.R().
+	resp, err := t.pr.client.R().
 		SetFormData(formData).
 		SetFileReader("file", "myfile.txt", bytes.NewReader(blob)).
 		SetResult(&data).
@@ -73,9 +75,9 @@ func (pr *perfRunner) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (st
 	return data.ID.String(), nil
 }
 
-func (pr *perfRunner) downloadAndVerifyBlob(nodeURL, id string, expectedHash [32]byte) error {
+func (t *testBase) downloadAndVerifyBlob(nodeURL, id string, expectedHash [32]byte) error {
 	var blob []byte
-	res, err := pr.client.R().
+	res, err := t.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/octet",
 			"Content-Type": "application/json",

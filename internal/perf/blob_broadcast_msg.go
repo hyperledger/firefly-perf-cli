@@ -7,12 +7,12 @@ import (
 	"github.com/hyperledger/firefly/pkg/fftypes"
 )
 
-type blobPrivate struct {
+type blobBroadcast struct {
 	testBase
 }
 
-func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
-	return &blobPrivate{
+func newBlobBroadcastTestWorker(pr *perfRunner, workerID int) TestCase {
+	return &blobBroadcast{
 		testBase: testBase{
 			pr:       pr,
 			workerID: workerID,
@@ -20,15 +20,15 @@ func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
 	}
 }
 
-func (tc *blobPrivate) Name() string {
-	return "Blob Private"
+func (tc *blobBroadcast) Name() string {
+	return "Blob Broadcast"
 }
 
-func (tc *blobPrivate) IDType() TrackingIDType {
+func (tc *blobBroadcast) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *blobPrivate) RunOnce() (string, error) {
+func (tc *blobBroadcast) RunOnce() (string, error) {
 
 	blob, hash := tc.generateBlob(big.NewInt(1024))
 	dataID, err := tc.uploadBlob(blob, hash, tc.pr.client.BaseURL)
@@ -42,17 +42,10 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 			   "id": "%s"
 		   }
 		],
-		"group": {
-			"members": [
-				{
-					"identity": "%s"
-				}
-			]
-		},
 		"header":{
 		   "tag": "%s"
 		}
-	 }`, dataID, tc.pr.cfg.Recipient, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
+	 }`, dataID, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
@@ -63,9 +56,9 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resMessage).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/messages/private", tc.pr.client.BaseURL))
+		Post(fmt.Sprintf("%s/api/v1/namespaces/default/messages/broadcast", tc.pr.client.BaseURL))
 	if err != nil || res.IsError() {
-		return "", fmt.Errorf("Error sending private message with blob attachment [%d]: %s (%+v)", resStatus(res), err, &resError)
+		return "", fmt.Errorf("Error sending broadcast message with blob attachment [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
 	return resMessage.Header.ID.String(), nil
 }

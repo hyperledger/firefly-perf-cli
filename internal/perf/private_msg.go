@@ -2,17 +2,16 @@ package perf
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
 )
 
-type blobPrivate struct {
+type private struct {
 	testBase
 }
 
-func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
-	return &blobPrivate{
+func newPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
+	return &private{
 		testBase: testBase{
 			pr:       pr,
 			workerID: workerID,
@@ -20,27 +19,23 @@ func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
 	}
 }
 
-func (tc *blobPrivate) Name() string {
-	return "Blob Private"
+func (tc *private) Name() string {
+	return "Private Message"
 }
 
-func (tc *blobPrivate) IDType() TrackingIDType {
+func (tc *private) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *blobPrivate) RunOnce() (string, error) {
-
-	blob, hash := tc.generateBlob(big.NewInt(1024))
-	dataID, err := tc.uploadBlob(blob, hash, tc.pr.client.BaseURL)
-	if err != nil {
-		return "", fmt.Errorf("Error uploading blob: %s", err)
-	}
+func (tc *private) RunOnce() (string, error) {
 
 	payload := fmt.Sprintf(`{
-		"data":[
-		   {
-			   "id": "%s"
-		   }
+		"data": [
+			{
+				"value": {
+					"privateID": "%s"
+				}
+			}
 		],
 		"group": {
 			"members": [
@@ -50,9 +45,9 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 			]
 		},
 		"header":{
-		   "tag": "%s"
+			"tag":"%s"
 		}
-	 }`, dataID, tc.pr.cfg.Recipient, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
+	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.Recipient, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
@@ -65,7 +60,7 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 		SetError(&resError).
 		Post(fmt.Sprintf("%s/api/v1/namespaces/default/messages/private", tc.pr.client.BaseURL))
 	if err != nil || res.IsError() {
-		return "", fmt.Errorf("Error sending private message with blob attachment [%d]: %s (%+v)", resStatus(res), err, &resError)
+		return "", fmt.Errorf("Error sending private message [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
 	return resMessage.Header.ID.String(), nil
 }
