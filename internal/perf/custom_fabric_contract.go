@@ -18,6 +18,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"strconv"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -37,7 +38,7 @@ func newCustomFabricTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *customFabric) Name() string {
-	return "Custom Ethereum"
+	return conf.PerfTestCustomFabricContract.String()
 }
 
 func (tc *customFabric) IDType() TrackingIDType {

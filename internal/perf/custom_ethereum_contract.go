@@ -18,6 +18,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"strconv"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -37,7 +38,7 @@ func newCustomEthereumTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *customEthereum) Name() string {
-	return "Custom Ethereum"
+	return conf.PerfTestCustomEthereumContract.String()
 }
 
 func (tc *customEthereum) IDType() TrackingIDType {

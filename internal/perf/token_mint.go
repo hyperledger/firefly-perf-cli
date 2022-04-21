@@ -18,6 +18,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
 )
@@ -36,7 +37,7 @@ func newTokenMintTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *tokenMint) Name() string {
-	return "Token Mint"
+	return conf.PerfTestTokenMint.String()
 }
 
 func (tc *tokenMint) IDType() TrackingIDType {
