@@ -67,7 +67,7 @@ cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
-cat <<EOF > $BASE_PATH/instances.yaml
+cat <<EOF > $BASE_PATH/instances.yml
 stackJSONPath: ${HOME}/.firefly/stacks/$NEW_STACK_NAME/stack.json
 
 wsConfig:
@@ -118,7 +118,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
     JOBS="$JOBS token_mint custom_ethereum_contract"
-    cat <<EOF >> $BASE_PATH/instances.yaml
+    cat <<EOF >> $BASE_PATH/instances.yml
   - name: ff0-ff1-mint
     test: token_mint
     length: 5m
@@ -141,7 +141,7 @@ fi
 if [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
     docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
     output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
-    cat <<EOF >> $BASE_PATH/instances.yaml
+    cat <<EOF >> $BASE_PATH/instances.yml
   - name: ff1-contract
     test: custom_fabric_contract
     length: 5m
@@ -155,10 +155,10 @@ fi
 
 echo "FLAGS=$FLAGS"
 
-printf "${PURPLE}Modify $BASE_PATH/instances.yaml and the commnd below and run...\n${NC}"
+printf "${PURPLE}Modify $BASE_PATH/instances.yml and the commnd below and run...\n${NC}"
 
 echo '```'
-printf "${GREEN}nohup ffperf run -c $BASE_PATH/instances.yaml -n ff0-broadcast &> ffperf.log &${NC}\n"
+printf "${GREEN}nohup ffperf run -c $BASE_PATH/instances.yml -n ff0-broadcast &> ffperf.log &${NC}\n"
 echo '```'
 
 echo "core-config.yml"
@@ -169,6 +169,11 @@ echo '```'
 echo "ethconnect.yml"
 echo '```'
 cat ethconnect.yml
+echo '```'
+
+echo "instances.yml"
+echo '```'
+cat instances.yml
 echo '```'
 
 echo "FireFly git commit:"
