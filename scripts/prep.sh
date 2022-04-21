@@ -98,7 +98,7 @@ wsConfig:
 instances:
   - name: long-run
     tests: [${TESTS}]
-    length: 5m
+    length: 500h
     sender: ${FIRST_NODE_IDENTITY}
     workers: 200
     messageOptions:
