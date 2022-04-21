@@ -143,6 +143,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		Tests: instance.Tests,
 	}
 
+	runnerConfig.StackJSONPath = perfConfig.StackJSONPath
 	stack, stackErr := readStackJSON(runnerConfig.StackJSONPath)
 	if stackErr != nil {
 		return nil, stackErr
@@ -165,7 +166,6 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.ContractOptions = instance.ContractOptions
 	runnerConfig.Workers = instance.Workers
 	runnerConfig.Length = instance.Length
-	runnerConfig.StackJSONPath = perfConfig.StackJSONPath
 	runnerConfig.WebSocket = perfConfig.WSConfig
 	runnerConfig.Daemon = perfConfig.Daemon
 	runnerConfig.DelinquentAction = deliquentAction
