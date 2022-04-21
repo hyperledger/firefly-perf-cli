@@ -100,6 +100,7 @@ instances:
     tests: [${TESTS}]
     length: 500h
     sender: ${FIRST_NODE_IDENTITY}
+    recipient: ${SECOND_NODE_IDENTITY}
     workers: 200
     messageOptions:
       longMessage: false
