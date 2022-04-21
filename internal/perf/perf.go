@@ -20,7 +20,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/prometheus/client_golang/prometheus"
 	"os"
 	"os/signal"
 	"strconv"
@@ -28,6 +27,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
@@ -241,7 +242,8 @@ func (pr *perfRunner) Start() (err error) {
 		ptr := id % len(pr.cfg.Tests)
 		var tc TestCase
 
-		switch pr.cfg.Tests[ptr] {
+		testCaseName := pr.cfg.Tests[ptr]
+		switch testCaseName {
 		case conf.PerfTestBroadcast:
 			tc = newBroadcastTestWorker(pr, id)
 		case conf.PerfTestPrivateMsg:
@@ -256,6 +258,8 @@ func (pr *perfRunner) Start() (err error) {
 			tc = newBlobBroadcastTestWorker(pr, id)
 		case conf.PerfTestBlobPrivateMsg:
 			tc = newBlobPrivateTestWorker(pr, id)
+		default:
+			return fmt.Errorf("Unknown test case '%s'", testCaseName)
 		}
 
 		go func() {
