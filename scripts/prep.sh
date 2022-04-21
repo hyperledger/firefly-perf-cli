@@ -106,7 +106,6 @@ instances:
       tokenType: fungible
     contractOptions: ${CONTRACT_OPTIONS}
 EOF
-fi
 
 echo "FLAGS=$FLAGS"
 
