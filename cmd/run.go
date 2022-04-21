@@ -106,7 +106,7 @@ func loadConfig(filename string) (*conf.PerformanceTestConfig, error) {
 	} else {
 		var config *conf.PerformanceTestConfig
 		var err error
-		if path.Ext(filename) == ".yaml" {
+		if path.Ext(filename) == ".yaml" || path.Ext(filename) == ".yml" {
 			err = yaml.Unmarshal(d, &config)
 		} else {
 			err = json.Unmarshal(d, &config)
