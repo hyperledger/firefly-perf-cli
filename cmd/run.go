@@ -19,6 +19,9 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"path"
+
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/hyperledger/firefly-perf-cli/internal/server"
@@ -28,8 +31,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
-	"io/ioutil"
-	"path"
 )
 
 var configFilePath string
@@ -139,20 +140,12 @@ func selectInstance(config *conf.PerformanceTestConfig) (*conf.InstanceConfig, e
 
 func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig *conf.PerformanceTestConfig) (*conf.PerfRunnerConfig, error) {
 	runnerConfig := &conf.PerfRunnerConfig{
-		Tests: []fftypes.FFEnum{instance.Test},
+		Tests: instance.Tests,
 	}
 
-	switch instance.Test {
-	case conf.PerfTestBroadcast:
-	case conf.PerfTestPrivateMsg:
-		runnerConfig.MessageOptions = instance.MessageOptions
-	case conf.PerfTestTokenMint:
-		runnerConfig.TokenOptions = instance.TokenOptions
-	case conf.PerfTestCustomFabricContract:
-	case conf.PerfTestCustomEthereumContract:
-		runnerConfig.ContractOptions = instance.ContractOptions
-	}
-
+	runnerConfig.MessageOptions = instance.MessageOptions
+	runnerConfig.TokenOptions = instance.TokenOptions
+	runnerConfig.ContractOptions = instance.ContractOptions
 	runnerConfig.Workers = instance.Workers
 	runnerConfig.Length = instance.Length
 	runnerConfig.Recipient = instance.Recipient

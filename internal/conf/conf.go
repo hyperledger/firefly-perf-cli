@@ -64,16 +64,16 @@ type PerformanceTestConfig struct {
 }
 
 type InstanceConfig struct {
-	Name             string          `yaml:"name" json:"name"`
-	Test             fftypes.FFEnum  `yaml:"test" json:"test"`
-	Length           time.Duration   `yaml:"length" json:"length"`
-	MessageOptions   MessageOptions  `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Sender           string          `json:"sender" yaml:"sender"`
-	Recipient        string          `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	RecipientAddress string          `json:"recipientAddress,omitempty" yaml:"recipientAddress,omitempty"`
-	TokenOptions     TokenOptions    `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions  ContractOptions `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	Workers          int             `json:"workers" yaml:"workers"`
+	Name             string           `yaml:"name" json:"name"`
+	Tests            []fftypes.FFEnum `yaml:"tests" json:"test"`
+	Length           time.Duration    `yaml:"length" json:"length"`
+	MessageOptions   MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender           string           `json:"sender" yaml:"sender"`
+	Recipient        string           `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	RecipientAddress string           `json:"recipientAddress,omitempty" yaml:"recipientAddress,omitempty"`
+	TokenOptions     TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions  ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	Workers          int              `json:"workers" yaml:"workers"`
 }
 
 type Node struct {

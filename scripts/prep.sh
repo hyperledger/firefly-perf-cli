@@ -67,6 +67,21 @@ cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
+TESTS='"msg_broadcast","msg_private","blob_broadcast","blob_private","contract"'
+
+if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
+    output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | jq -r '.address')
+    prefix='contract address: '
+    CONTRACT_ADDRESS=${output#"$prefix"}
+    FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
+    TESTS="${TESTS},\"token_mint\""
+    CONTRACT_OPTIONS="{\"address\": \"${CONTRACT_ADDRESS}\"}"
+elif [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
+    docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
+    output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
+    CONTRACT_OPTIONS="{\"channel\": \"firefly\", \"chaincode\": \"assetcreator\"}"
+fi
+
 cat <<EOF > $BASE_PATH/instances.yml
 stackJSONPath: ${HOME}/.firefly/stacks/$NEW_STACK_NAME/stack.json
 
@@ -80,76 +95,16 @@ wsConfig:
   heartbeatInterval: 5s
 
 instances:
-  - name: ff0-broadcast
-    test: msg_broadcast
+  - name: long-run
+    tests: [${TESTS}]
     length: 5m
     sender: ${FIRST_NODE_IDENTITY}
-    workers: 10
+    workers: 200
     messageOptions:
-      longMessage: true
-  - name: ff0-ff1-msg-private
-    test: msg_private
-    length: 5m
-    sender: ${FIRST_NODE_IDENTITY}
-    recipient: ${SECOND_ORG_IDENTITY}
-    workers: 10
-    messageOptions:
-      longMessage: true
-  - name: ff1-blob-broadcast
-    test: blob_broadcast
-    length: 5m
-    sender: ${SECOND_NODE_IDENTITY}
-    workers: 10
-    messageOptions:
-      longMessage: true
-  - name: ff1-ff0-blob-private
-    test: blob_private
-    length: 5m
-    sender: ${SECOND_NODE_IDENTITY}
-    recipient: ${FIRST_ORG_IDENTITY}
-    workers: 10
-    messageOptions:
-      longMessage: true
-EOF
-
-if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
-    output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | jq -r '.address')
-    prefix='contract address: '
-    CONTRACT_ADDRESS=${output#"$prefix"}
-    FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
-    JOBS="$JOBS token_mint custom_ethereum_contract"
-    cat <<EOF >> $BASE_PATH/instances.yml
-  - name: ff0-ff1-mint
-    test: token_mint
-    length: 5m
-    sender: ${FIRST_NODE_IDENTITY}
-    recipient: ${SECOND_ORG_IDENTITY}
-    recipientAddress: ${SECOND_ORG_ADDRESS}
-    workers: 10
+      longMessage: false
     tokenOptions:
       tokenType: fungible
-  - name: ff1-contract
-    test: custom_ethereum_contract
-    length: 5m
-    sender: ${SECOND_NODE_IDENTITY}
-    workers: 10
-    contractOptions:
-      address: ${CONTRACT_ADDRESS}
-EOF
-fi
-
-if [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
-    docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
-    output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
-    cat <<EOF >> $BASE_PATH/instances.yml
-  - name: ff1-contract
-    test: custom_fabric_contract
-    length: 5m
-    sender: ${SECOND_NODE_IDENTITY}
-    workers: 10
-    contractOptions:
-      channel: firefly
-      chaincode: assetcreator
+    contractOptions: ${CONTRACT_OPTIONS}
 EOF
 fi
 
