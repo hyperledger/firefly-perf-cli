@@ -48,7 +48,7 @@ func (tc *private) RunOnce() (string, error) {
 		"header":{
 			"tag":"%s"
 		}
-	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.Recipient, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
+	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.RecipientOrg, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

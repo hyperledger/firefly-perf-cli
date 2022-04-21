@@ -54,15 +54,6 @@ cat ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml | yq '
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff start $NEW_STACK_NAME --verbose --no-rollback
 
-# Get org identity
-FIRST_ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
-FIRST_ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[0].account.address')
-FIRST_NODE_IDENTITY=$(curl http://localhost:5000/api/v1/network/nodes | jq -r '.[0].did')
-
-SECOND_ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[1].did')
-SECOND_ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[1].account.address')
-SECOND_NODE_IDENTITY=$(curl http://localhost:5000/api/v1/network/nodes | jq -r '.[1].did')
-
 cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
@@ -99,8 +90,8 @@ instances:
   - name: long-run
     tests: [${TESTS}]
     length: 500h
-    sender: ${FIRST_NODE_IDENTITY}
-    recipient: ${SECOND_NODE_IDENTITY}
+    sender: 0
+    recipient: 1
     workers: 200
     messageOptions:
       longMessage: false

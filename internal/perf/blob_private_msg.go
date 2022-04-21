@@ -53,7 +53,7 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 		"header":{
 		   "tag": "%s"
 		}
-	 }`, dataID, tc.pr.cfg.Recipient, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
+	 }`, dataID, tc.pr.cfg.RecipientOrg, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

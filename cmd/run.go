@@ -143,61 +143,42 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		Tests: instance.Tests,
 	}
 
+	stack, stackErr := readStackJSON(runnerConfig.StackJSONPath)
+	if stackErr != nil {
+		return nil, stackErr
+	}
+	runnerConfig.NodeURLs = make([]string, len(stack.Members))
+	for i, member := range stack.Members {
+		if member.FireflyHostname == "" {
+			member.FireflyHostname = "localhost"
+		}
+		scheme := "http"
+		if member.UseHTTPS {
+			scheme = "https"
+		}
+
+		runnerConfig.NodeURLs[i] = fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort)
+	}
+
 	runnerConfig.MessageOptions = instance.MessageOptions
 	runnerConfig.TokenOptions = instance.TokenOptions
 	runnerConfig.ContractOptions = instance.ContractOptions
 	runnerConfig.Workers = instance.Workers
 	runnerConfig.Length = instance.Length
-	runnerConfig.Recipient = instance.Recipient
-	runnerConfig.RecipientAddress = instance.RecipientAddress
 	runnerConfig.StackJSONPath = perfConfig.StackJSONPath
 	runnerConfig.WebSocket = perfConfig.WSConfig
 	runnerConfig.Daemon = perfConfig.Daemon
 	runnerConfig.DelinquentAction = deliquentAction
-	runnerConfig.Sender = instance.Sender
+
+	runnerConfig.SenderURL = runnerConfig.NodeURLs[instance.Sender]
+	if instance.Recipient != nil {
+		runnerConfig.RecipientOrg = fmt.Sprintf("did:firefly:org/%s", stack.Members[*instance.Recipient].OrgName)
+		runnerConfig.RecipientAddress = stack.Members[*instance.Recipient].Address
+	}
 
 	err := validateConfig(*runnerConfig)
 	if err != nil {
 		return nil, err
-	}
-
-	if runnerConfig.StackJSONPath == "" {
-		runnerConfig.Nodes = map[string]conf.Node{
-			"did:firefly:node/node_0": {
-				DID:     "did:firefly:node/node_0",
-				URL:     "http://localhost:5000",
-				Name:    "node_0",
-				OrgDID:  "did:firefly:org/org_0",
-				OrgName: "org_0",
-			},
-		}
-	} else {
-		stack, err := readStackJSON(runnerConfig.StackJSONPath)
-		if err != nil {
-			return nil, err
-		}
-		runnerConfig.Nodes = make(map[string]conf.Node, len(stack.Members))
-		for _, member := range stack.Members {
-			if member.FireflyHostname == "" {
-				member.FireflyHostname = "localhost"
-			}
-			scheme := "http"
-			if member.UseHTTPS {
-				scheme = "https"
-			}
-
-			did := fmt.Sprintf("did:firefly:node/%s", member.NodeName)
-
-			runnerConfig.Nodes[did] = conf.Node{
-				DID:      did,
-				URL:      fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort),
-				Name:     member.NodeName,
-				OrgName:  member.OrgName,
-				OrgDID:   fmt.Sprintf("did:firefly:org/%s", member.OrgName),
-				Username: member.Username,
-				Password: member.Password,
-			}
-		}
 	}
 
 	return runnerConfig, nil

@@ -18,7 +18,6 @@ package conf
 
 import (
 	"net/url"
-	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -43,17 +42,17 @@ type PerfRunnerConfig struct {
 	Tests            []fftypes.FFEnum
 	Length           time.Duration
 	MessageOptions   MessageOptions
-	Recipient        string
+	RecipientOrg     string
 	RecipientAddress string
 	TokenOptions     TokenOptions
 	ContractOptions  ContractOptions
 	WebSocket        FireFlyWsConf
 	Workers          int
-	Nodes            map[string]Node
+	NodeURLs         []string
 	StackJSONPath    string
 	DelinquentAction string
 	Daemon           bool
-	Sender           string
+	SenderURL        string
 }
 
 type PerformanceTestConfig struct {
@@ -64,26 +63,15 @@ type PerformanceTestConfig struct {
 }
 
 type InstanceConfig struct {
-	Name             string           `yaml:"name" json:"name"`
-	Tests            []fftypes.FFEnum `yaml:"tests" json:"test"`
-	Length           time.Duration    `yaml:"length" json:"length"`
-	MessageOptions   MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Sender           string           `json:"sender" yaml:"sender"`
-	Recipient        string           `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	RecipientAddress string           `json:"recipientAddress,omitempty" yaml:"recipientAddress,omitempty"`
-	TokenOptions     TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions  ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	Workers          int              `json:"workers" yaml:"workers"`
-}
-
-type Node struct {
-	URL      string
-	DID      string
-	Name     string
-	OrgName  string
-	OrgDID   string
-	Username string
-	Password string
+	Name            string           `yaml:"name" json:"name"`
+	Tests           []fftypes.FFEnum `yaml:"tests" json:"test"`
+	Length          time.Duration    `yaml:"length" json:"length"`
+	MessageOptions  MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender          int              `json:"sender" yaml:"sender"`
+	Recipient       *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	TokenOptions    TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	Workers         int              `json:"workers" yaml:"workers"`
 }
 
 type FireFlyWsConf struct {
@@ -144,13 +132,4 @@ var ValidPerfTests = map[string]fftypes.FFEnum{
 	PerfTestCustomFabricContract.String():   PerfTestCustomFabricContract,
 	PerfTestBlobBroadcast.String():          PerfTestBlobBroadcast,
 	PerfTestBlobPrivateMsg.String():         PerfTestBlobPrivateMsg,
-}
-
-func ValidPerfTestsString() []string {
-	keys := make([]string, 0, len(ValidPerfTests))
-	for key := range ValidPerfTests {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
 }
