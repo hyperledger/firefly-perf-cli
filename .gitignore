@@ -6,3 +6,5 @@ ff-perf.log
 dist/
 *.iml
 .idea/
+
+**/local-values*.yaml

@@ -1,0 +1,6 @@
+dependencies:
+- name: firefly
+  repository: oci://ghcr.io/hyperledger/helm
+  version: 0.4.1-20220324-129
+digest: sha256:0d719aa388a17ef57b8cdbd7c3ecb01eba95b06943368bf91aa949ca66fba4db
+generated: "2022-03-25T12:56:06.588711-04:00"
