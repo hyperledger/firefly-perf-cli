@@ -39,8 +39,6 @@ import (
 var mutex = &sync.Mutex{}
 var NAMESPACE = "default"
 var TRANSPORT_TYPE = "websockets"
-<<<<<<< HEAD
-=======
 
 var METRICS_NAMESPACE = "ffperf"
 var METRICS_SUBSYSTEM = "runner"
@@ -50,7 +48,6 @@ var deliquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Name:      "deliquent_msgs_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
->>>>>>> 9e36e57 (Requiring Sender DID (#2))
 
 var perfTestDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 	Namespace: METRICS_NAMESPACE,
@@ -121,7 +118,6 @@ func New(config *conf.PerfRunnerConfig) PerfRunner {
 	for i := 0; i < config.Workers; i++ {
 		wsReceivers = append(wsReceivers, make(chan string))
 	}
-
 
 	wsUUID := *fftypes.NewUUID()
 	ctx, cancel := context.WithCancel(context.Background())
