@@ -394,7 +394,8 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				pr.wsReceivers[workerID] <- nodeURL
 			}
 		case <-pr.ctx.Done():
-			log.Errorf("Run loop exiting (context cancelled)")
+			log.Warnf("Run loop exiting (context cancelled)")
+			wsconn.Close()
 			return
 		}
 	}
