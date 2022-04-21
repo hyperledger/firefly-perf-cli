@@ -55,14 +55,20 @@ printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff start $NEW_STACK_NAME --verbose --no-rollback
 
 # Get org identity
-ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
-ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[0].account.address')
+FIRST_ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[0].did')
+FIRST_ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[0].account.address')
+FIRST_NODE_IDENTITY=$(curl http://localhost:5000/api/v1/network/nodes | jq -r '.[0].did')
+
+SECOND_ORG_IDENTITY=$(curl http://localhost:5000/api/v1/network/organizations | jq -r '.[1].did')
+SECOND_ORG_ADDRESS=$(cat ~/.firefly/stacks/$NEW_STACK_NAME/stack.json | jq -r '.members[1].account.address')
+SECOND_NODE_IDENTITY=$(curl http://localhost:5000/api/v1/network/nodes | jq -r '.[1].did')
+
 cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
 cat <<EOF > $BASE_PATH/instances.yaml
-stackJSONPATH: ${HOME}/.firefly/stacks/$NEW_STACK_NAME/stack.json
+stackJSONPath: ${HOME}/.firefly/stacks/$NEW_STACK_NAME/stack.json
 
 wsConfig:
   wsPath: /ws
@@ -71,37 +77,36 @@ wsConfig:
   initialDelay: 250ms
   maximumDelay: 30s
   initialConnectAttempts: 5
+  heartbeatInterval: 5s
 
 instances:
-  - name: ff0-ff1-msg-broadcast
+  - name: ff0-broadcast
     test: msg_broadcast
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${FIRST_NODE_IDENTITY}
     workers: 10
     messageOptions:
       longMessage: true
   - name: ff0-ff1-msg-private
     test: msg_private
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${FIRST_NODE_IDENTITY}
+    recipient: ${SECOND_ORG_IDENTITY}
     workers: 10
     messageOptions:
       longMessage: true
-  - name: ff0-ff1-blob-broadcast
+  - name: ff1-blob-broadcast
     test: blob_broadcast
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${SECOND_NODE_IDENTITY}
     workers: 10
     messageOptions:
       longMessage: true
-  - name: ff0-ff1-blob-private
+  - name: ff1-ff0-blob-private
     test: blob_private
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${SECOND_NODE_IDENTITY}
+    recipient: ${FIRST_ORG_IDENTITY}
     workers: 10
     messageOptions:
       longMessage: true
@@ -117,16 +122,16 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
   - name: ff0-ff1-mint
     test: token_mint
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${FIRST_NODE_IDENTITY}
+    recipient: ${SECOND_ORG_IDENTITY}
+    recipientAddress: ${SECOND_ORG_ADDRESS}
     workers: 10
     tokenOptions:
       tokenType: fungible
-  - name: ff0-ff1-contract
+  - name: ff1-contract
     test: custom_ethereum_contract
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${SECOND_NODE_IDENTITY}
     workers: 10
     contractOptions:
       address: ${CONTRACT_ADDRESS}
@@ -137,11 +142,10 @@ if [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
     docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
     output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
     cat <<EOF >> $BASE_PATH/instances.yaml
-  - name: ff0-ff1-contract
+  - name: ff1-contract
     test: custom_fabric_contract
     length: 5m
-    recipient: ${ORG_IDENTITY}
-    recipientAddress: ${ORG_ADDRESS}
+    sender: ${SECOND_NODE_IDENTITY}
     workers: 10
     contractOptions:
       channel: firefly
@@ -154,7 +158,7 @@ echo "FLAGS=$FLAGS"
 printf "${PURPLE}Modify $BASE_PATH/instances.yaml and the commnd below and run...\n${NC}"
 
 echo '```'
-printf "${GREEN}nohup ffperf run -c $BASE_PATH/instances.yaml -n ff0-ff1-broadcast &> ffperf.log &${NC}\n"
+printf "${GREEN}nohup ffperf run -c $BASE_PATH/instances.yaml -n ff0-broadcast &> ffperf.log &${NC}\n"
 echo '```'
 
 echo "core-config.yml"

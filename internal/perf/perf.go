@@ -53,7 +53,7 @@ var perfTestDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramO
 	Namespace: METRICS_NAMESPACE,
 	Subsystem: METRICS_SUBSYSTEM,
 	Name:      "perf_test_duration_seconds",
-	Buckets:   []float64{0.5, 1.0, 2.0, 5.0, 10.0},
+	Buckets:   []float64{1.0, 2.0, 5.0, 10.0, 30.0},
 }, []string{"test"})
 
 func init() {
