@@ -15,7 +15,7 @@ DIRNAME="ff_logs_$(TZ=":US/Eastern" date +%m_%d_%Y_%I_%M_%p)"
 mkdir ~/ffperf-testing/$DIRNAME
 
 # Copy ffperf logs
-cp ~/ffperf-testing/ffperf.log ~/ffperf-testing/$DIRNAME
+cp ~/ffperf-testing/ffperf*.log ~/ffperf-testing/$DIRNAME
 
 # Fetch firefly_core_0 logs
 LOG_PATH=$(docker inspect --format='{{.LogPath}}' "$1_firefly_core_0")

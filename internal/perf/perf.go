@@ -1,3 +1,19 @@
+// Copyright © 2022 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package perf
 
 import (
@@ -5,10 +21,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
@@ -20,6 +40,27 @@ import (
 var mutex = &sync.Mutex{}
 var NAMESPACE = "default"
 var TRANSPORT_TYPE = "websockets"
+
+var METRICS_NAMESPACE = "ffperf"
+var METRICS_SUBSYSTEM = "runner"
+
+var deliquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+	Namespace: METRICS_NAMESPACE,
+	Name:      "deliquent_msgs_total",
+	Subsystem: METRICS_SUBSYSTEM,
+})
+
+var perfTestDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Namespace: METRICS_NAMESPACE,
+	Subsystem: METRICS_SUBSYSTEM,
+	Name:      "perf_test_duration_seconds",
+	Buckets:   []float64{1.0, 2.0, 5.0, 10.0, 30.0},
+}, []string{"test"})
+
+func init() {
+	prometheus.Register(deliquentMsgsCounter)
+	prometheus.Register(perfTestDurationHistogram)
+}
 
 type PerfRunner interface {
 	Init() error
@@ -48,19 +89,21 @@ type inflightTest struct {
 
 type perfRunner struct {
 	bfr             chan int
-	cfg             *conf.PerfConfig
+	cfg             *conf.PerfRunnerConfig
 	client          *resty.Client
 	ctx             context.Context
+	shutdown        context.CancelFunc
 	endTime         int64
 	msgTimeMap      map[string]*inflightTest
 	poolName        string
-	shutdown        chan bool
 	tagPrefix       string
-	wsconns         map[string]wsclient.WSClient
+	wsconns         []wsclient.WSClient
 	wsReceivers     []chan string
 	wsUUID          fftypes.UUID
 	nodeURLs        []string
 	subscriptionMap map[string]SubscriptionInfo
+	daemon          bool
+	sender          string
 }
 
 type SubscriptionInfo struct {
@@ -68,7 +111,7 @@ type SubscriptionInfo struct {
 	Job     fftypes.FFEnum
 }
 
-func New(config *conf.PerfConfig) PerfRunner {
+func New(config *conf.PerfRunnerConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 
 	// Create channel based dispatch for workers
@@ -77,46 +120,51 @@ func New(config *conf.PerfConfig) PerfRunner {
 		wsReceivers = append(wsReceivers, make(chan string))
 	}
 
-	wsconns := make(map[string]wsclient.WSClient)
-
-	for _, nodeURL := range config.NodeURLs {
-		// Create websocket client
-		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
-		wsconn, err := wsclient.New(context.Background(), wsConfig, nil, nil)
-		if err != nil {
-			log.Error("Could not create websocket connection: %s", err)
-		}
-		wsconns[nodeURL] = wsconn
-	}
-
 	wsUUID := *fftypes.NewUUID()
+	ctx, cancel := context.WithCancel(context.Background())
 
-	return &perfRunner{
+	pr := &perfRunner{
 		bfr:             make(chan int, config.Workers),
 		cfg:             config,
-		ctx:             context.Background(),
+		ctx:             ctx,
+		shutdown:        cancel,
 		endTime:         time.Now().Unix() + int64(config.Length.Seconds()),
 		poolName:        poolName,
-		shutdown:        make(chan bool),
 		tagPrefix:       fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:      make(map[string]*inflightTest),
-		wsconns:         wsconns,
 		wsReceivers:     wsReceivers,
 		wsUUID:          wsUUID,
 		nodeURLs:        config.NodeURLs,
 		subscriptionMap: make(map[string]SubscriptionInfo),
+		daemon:          config.Daemon,
+		sender:          config.SenderURL,
 	}
+
+	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
+
+	for i, nodeURL := range config.NodeURLs {
+		// Create websocket client
+		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
+		wsconn, err := wsclient.New(pr.ctx, wsConfig, nil, pr.startSubscriptions)
+		if err != nil {
+			log.Error("Could not create websocket connection: %s", err)
+		}
+		wsconns[i] = wsconn
+	}
+
+	pr.wsconns = wsconns
+	return pr
 }
 
 func (pr *perfRunner) Init() (err error) {
-	pr.client = getFFClient(pr.nodeURLs[0])
+	pr.client = getFFClient(pr.sender)
 
 	return nil
 }
 
 func (pr *perfRunner) Start() (err error) {
 	// Create token pool, if needed
-	if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdTokenMint) {
+	if containsTargetCmd(pr.cfg.Tests, conf.PerfTestTokenMint) {
 		err = pr.CreateTokenPool()
 		if err != nil {
 			return err
@@ -126,7 +174,7 @@ func (pr *perfRunner) Start() (err error) {
 	for _, nodeURL := range pr.nodeURLs {
 		// Create contract sub and listener, if needed
 		var listenerID string
-		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomEthereumContract) {
+		if containsTargetCmd(pr.cfg.Tests, conf.PerfTestCustomEthereumContract) {
 			listenerID, err = pr.createEthereumContractListener(nodeURL)
 			if err != nil {
 				return err
@@ -137,22 +185,23 @@ func (pr *perfRunner) Start() (err error) {
 			}
 			pr.subscriptionMap[subID] = SubscriptionInfo{
 				NodeURL: nodeURL,
-				Job:     conf.PerfCmdCustomEthereumContract,
+				Job:     conf.PerfTestCustomEthereumContract,
 			}
 		}
 
-		if containsTargetCmd(pr.cfg.Cmds, conf.PerfCmdCustomFabricContract) {
+		if containsTargetCmd(pr.cfg.Tests, conf.PerfTestCustomFabricContract) {
 			listenerID, err = pr.createFabricContractListener(nodeURL)
 			if err != nil {
 				return err
 			}
 			subID, err := pr.createContractsSub(nodeURL, listenerID)
+
 			if err != nil {
 				return err
 			}
 			pr.subscriptionMap[subID] = SubscriptionInfo{
 				NodeURL: nodeURL,
-				Job:     conf.PerfCmdCustomFabricContract,
+				Job:     conf.PerfTestCustomFabricContract,
 			}
 		}
 
@@ -163,7 +212,7 @@ func (pr *perfRunner) Start() (err error) {
 		}
 		pr.subscriptionMap[subID] = SubscriptionInfo{
 			NodeURL: nodeURL,
-			Job:     conf.PerfCmdBroadcast,
+			Job:     conf.PerfTestBroadcast,
 		}
 		// Create subscription for blob message confirmations
 		subID, err = pr.createMsgConfirmSub(nodeURL, fmt.Sprintf("blob_%s", pr.tagPrefix), fmt.Sprintf("^blob_%s_", pr.tagPrefix))
@@ -172,38 +221,41 @@ func (pr *perfRunner) Start() (err error) {
 		}
 		pr.subscriptionMap[subID] = SubscriptionInfo{
 			NodeURL: nodeURL,
-			Job:     conf.PerfBlobBroadcast,
+			Job:     conf.PerfTestBlobBroadcast,
 		}
 	}
 
 	// Open websocket clients for all subscriptions
-	for nodeURL, wsconn := range pr.wsconns {
+	for i, wsconn := range pr.wsconns {
 		err = pr.openWsClient(wsconn)
 		if err != nil {
 			return err
 		}
-		go pr.eventLoop(nodeURL, wsconn)
+		go pr.eventLoop(pr.nodeURLs[i], wsconn)
 	}
 
 	for id := 0; id < pr.cfg.Workers; id++ {
-		ptr := id % len(pr.cfg.Cmds)
+		ptr := id % len(pr.cfg.Tests)
 		var tc TestCase
 
-		switch pr.cfg.Cmds[ptr] {
-		case conf.PerfCmdBroadcast:
+		testCaseName := pr.cfg.Tests[ptr]
+		switch testCaseName {
+		case conf.PerfTestBroadcast:
 			tc = newBroadcastTestWorker(pr, id)
-		case conf.PerfCmdPrivateMsg:
+		case conf.PerfTestPrivateMsg:
 			tc = newPrivateTestWorker(pr, id)
-		case conf.PerfCmdTokenMint:
+		case conf.PerfTestTokenMint:
 			tc = newTokenMintTestWorker(pr, id)
-		case conf.PerfCmdCustomEthereumContract:
+		case conf.PerfTestCustomEthereumContract:
 			tc = newCustomEthereumTestWorker(pr, id)
-		case conf.PerfCmdCustomFabricContract:
+		case conf.PerfTestCustomFabricContract:
 			tc = newCustomFabricTestWorker(pr, id)
-		case conf.PerfBlobBroadcast:
+		case conf.PerfTestBlobBroadcast:
 			tc = newBlobBroadcastTestWorker(pr, id)
-		case conf.PerfBlobPrivateMsg:
+		case conf.PerfTestBlobPrivateMsg:
 			tc = newBlobPrivateTestWorker(pr, id)
+		default:
+			return fmt.Errorf("Unknown test case '%s'", testCaseName)
 		}
 
 		go func() {
@@ -214,18 +266,53 @@ func (pr *perfRunner) Start() (err error) {
 		}()
 	}
 
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt)
+	signal.Notify(signalCh, os.Kill)
+	signal.Notify(signalCh, syscall.SIGTERM)
+	signal.Notify(signalCh, syscall.SIGQUIT)
+	signal.Notify(signalCh, syscall.SIGKILL)
+
 	i := 0
 	lastCheckedTime := time.Now()
-	for time.Now().Unix() < pr.endTime {
-		pr.bfr <- i
-		i++
-		if time.Since(lastCheckedTime).Seconds() > 60 {
-			pr.getDelinquentMsgs()
+
+perfLoop:
+	for pr.daemon || time.Now().Unix() < pr.endTime {
+		timeout := time.After(60 * time.Second)
+
+		select {
+		case <-signalCh:
+			break perfLoop
+		case pr.bfr <- i:
+			i++
+			if time.Since(lastCheckedTime).Seconds() > 60 {
+				if pr.detectDeliquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					break perfLoop
+				}
+				lastCheckedTime = time.Now()
+			}
+			break
+		case <-timeout:
+			if pr.detectDeliquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+				break perfLoop
+			}
 			lastCheckedTime = time.Now()
+			break
 		}
 	}
 
-	pr.shutdown <- true
+	log.Info("Perf tests stopping...")
+	log.Warn("Shutting down all workers...")
+	log.Warn("Stopping event loops...")
+	pr.shutdown()
+
+	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
+	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
+	// one last time so metrics are up-to-date
+	log.Warn("Runner stopping in 30s")
+	time.Sleep(10 * time.Second)
+	pr.detectDeliquentMsgs()
+	time.Sleep(20 * time.Second)
 
 	return nil
 }
@@ -265,7 +352,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					b, _ := json.Marshal(&event)
 					log.Infof("Full event: %s", b)
 				} else {
-					log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Reference)
+					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
 				}
 			default:
 				workerIDFromTag := ""
@@ -274,7 +361,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					return fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
 				}
 				switch subInfo.Job {
-				case conf.PerfBlobBroadcast, conf.PerfBlobPrivateMsg:
+				case conf.PerfTestBlobBroadcast, conf.PerfTestBlobPrivateMsg:
 					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
 				default:
 					workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
@@ -287,7 +374,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					log.Infof("Full event: %s", b)
 				}
 
-				log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, nodeURL, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
+				log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, event.Message.Data[0].ID)
 			}
 
 			// Ack websocket event
@@ -307,7 +394,8 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				pr.wsReceivers[workerID] <- nodeURL
 			}
 		case <-pr.ctx.Done():
-			log.Errorf("Run loop exiting (context cancelled)")
+			log.Warnf("Run loop exiting (context cancelled)")
+			wsconn.Close()
 			return
 		}
 	}
@@ -321,21 +409,45 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	for {
 		select {
 		case <-pr.bfr:
+			// Worker sends its task
+			hist, histErr := perfTestDurationHistogram.GetMetricWith(prometheus.Labels{
+				"test": testName,
+			})
+
+			if histErr != nil {
+				log.Errorf("Error retreiving histogram: %s", histErr)
+			}
+			startTime := time.Now()
 			trackingID, err := tc.RunOnce()
+
 			if err != nil {
 				return err
 			}
+
 			pr.markTestInFlight(tc, trackingID)
 			log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
 
+			confirmations := len(pr.nodeURLs)
+			if testName == conf.PerfTestBlobPrivateMsg.String() || testName == conf.PerfTestPrivateMsg.String() {
+				confirmations = 2
+			}
+
 			// Wait for worker to confirm the message before proceeding to next task
-			for i := 0; i < len(pr.nodeURLs); i++ {
-				<-pr.wsReceivers[workerID]
+			for i := 0; i < confirmations; i++ {
+				select {
+				case <-pr.ctx.Done():
+					return nil
+				case <-pr.wsReceivers[workerID]:
+					break
+				}
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
 			pr.markTestComplete(trackingID)
+			if histErr == nil {
+				hist.Observe(time.Since(startTime).Seconds())
+			}
 			loop++
-		case <-pr.shutdown:
+		case <-pr.ctx.Done():
 			return nil
 		}
 	}
@@ -383,7 +495,13 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 }
 
 func (pr *perfRunner) openWsClient(wsconn wsclient.WSClient) (err error) {
-	wsconn.Connect()
+	if err := wsconn.Connect(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (pr *perfRunner) startSubscriptions(ctx context.Context, wsconn wsclient.WSClient) (err error) {
 	if err := pr.startSubscription(wsconn, pr.tagPrefix); err != nil {
 		return err
 	}
@@ -433,7 +551,7 @@ func getFFClient(node string) *resty.Client {
 	return client
 }
 
-func (pr *perfRunner) getDelinquentMsgs() {
+func (pr *perfRunner) detectDeliquentMsgs() bool {
 	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
 	for trackingID, inflight := range pr.msgTimeMap {
@@ -443,20 +561,15 @@ func (pr *perfRunner) getDelinquentMsgs() {
 	}
 	mutex.Unlock()
 
-	if len(delinquentMsgs) == 0 {
-		return
-	}
-
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
 		log.Errorf("Error printing delinquent messages: %s", err)
-		return
+		return len(delinquentMsgs) > 0
 	}
 
 	log.Warnf("Delinquent Messages:\n%s", string(dw))
-	if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-		os.Exit(1)
-	}
+
+	return len(delinquentMsgs) > 0
 }
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
@@ -596,4 +709,8 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 	log.Infof("Created contracts subscription on %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 
 	return sub.ID.String(), nil
+}
+
+func (pr *perfRunner) IsDaemon() bool {
+	return pr.daemon
 }

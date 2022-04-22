@@ -24,12 +24,14 @@ stack: ""
 #       fireflyHostname: "firefly.org0-firefly.svc.cluster.local"
 #       useHttps: false
 #       exposedFireflyPort: 3000
+#       address: 0xddddddddd
 #     - id: "1"
 #       orgName: "org1"
 #       nodeName: "org1-firefly"
 #       fireflyHostname: "firefly.org1-firefly.svc.cluster.local"
 #       useHttps: false
 #       exposedFireflyPort: 3000
+#       address: 0xaaaaaaaaa
 
 wsConfig:
   wsPath: /ws
@@ -41,10 +43,10 @@ wsConfig:
 
 instances: []
 #   - name: ff0-ff1-broadcast
-#     test: msg_broadcast
+#     tests: ["msg_broadcast"]
 #     length: 5m
-#     recipient: did:firefly:org/org_1
-#     recipientAddress: 0x912362b183362c8349d57a61e1c0c9183c08cff1
+#     sender: 0
+#     recipient: 1
 #     workers: 10
 #     messageOptions:
 #       longMessage: true

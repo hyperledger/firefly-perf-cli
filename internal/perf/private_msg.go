@@ -2,6 +2,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
 )
@@ -20,7 +21,7 @@ func newPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *private) Name() string {
-	return "Private Message"
+	return conf.PerfTestPrivateMsg.String()
 }
 
 func (tc *private) IDType() TrackingIDType {
@@ -47,7 +48,7 @@ func (tc *private) RunOnce() (string, error) {
 		"header":{
 			"tag":"%s"
 		}
-	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.Recipient, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
+	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.RecipientOrg, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

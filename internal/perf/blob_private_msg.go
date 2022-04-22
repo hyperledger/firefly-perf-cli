@@ -2,6 +2,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"math/big"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -21,7 +22,7 @@ func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *blobPrivate) Name() string {
-	return "Blob Private"
+	return conf.PerfTestBlobPrivateMsg.String()
 }
 
 func (tc *blobPrivate) IDType() TrackingIDType {
@@ -52,7 +53,7 @@ func (tc *blobPrivate) RunOnce() (string, error) {
 		"header":{
 		   "tag": "%s"
 		}
-	 }`, dataID, tc.pr.cfg.Recipient, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
+	 }`, dataID, tc.pr.cfg.RecipientOrg, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage fftypes.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

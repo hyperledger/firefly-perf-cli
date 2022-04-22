@@ -1,8 +1,23 @@
+// Copyright © 2022 Kaleido, Inc.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package conf
 
 import (
 	"net/url"
-	"sort"
 	"time"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -10,24 +25,24 @@ import (
 )
 
 type MessageOptions struct {
-	LongMessage bool
+	LongMessage bool `json:"longMessage" yaml:"longMessage"`
 }
 
 type TokenOptions struct {
-	TokenType string
+	TokenType string `json:"tokenType" yaml:"tokenType"`
 }
 
 type ContractOptions struct {
-	Address   string
-	Channel   string
-	Chaincode string
+	Address   string `json:"address" yaml:"address"`
+	Channel   string `json:"channel" yaml:"channel"`
+	Chaincode string `json:"chaincode" yaml:"chaincode"`
 }
 
-type PerfConfig struct {
-	Cmds             []fftypes.FFEnum
+type PerfRunnerConfig struct {
+	Tests            []fftypes.FFEnum
 	Length           time.Duration
 	MessageOptions   MessageOptions
-	Recipient        string
+	RecipientOrg     string
 	RecipientAddress string
 	TokenOptions     TokenOptions
 	ContractOptions  ContractOptions
@@ -36,17 +51,38 @@ type PerfConfig struct {
 	NodeURLs         []string
 	StackJSONPath    string
 	DelinquentAction string
+	Daemon           bool
+	SenderURL        string
+}
+
+type PerformanceTestConfig struct {
+	StackJSONPath string           `json:"stackJSONPath" yaml:"stackJSONPath"`
+	Instances     []InstanceConfig `json:"instances" yaml:"instances"`
+	WSConfig      FireFlyWsConf    `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`
+	Daemon        bool             `json:"daemon,omitempty" yaml:"daemon,omitempty"`
+}
+
+type InstanceConfig struct {
+	Name            string           `yaml:"name" json:"name"`
+	Tests           []fftypes.FFEnum `yaml:"tests" json:"test"`
+	Length          time.Duration    `yaml:"length" json:"length"`
+	MessageOptions  MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender          int              `json:"sender" yaml:"sender"`
+	Recipient       *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	TokenOptions    TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	Workers         int              `json:"workers" yaml:"workers"`
 }
 
 type FireFlyWsConf struct {
-	APIEndpoint            string        `mapstructure:"apiEndpoint"`
-	WSPath                 string        `mapstructure:"wsPath"`
-	ReadBufferSize         int           `mapstructure:"readBufferSize"`
-	WriteBufferSize        int           `mapstructure:"writeBufferSize"`
-	InitialDelay           time.Duration `mapstructure:"initialDelay"`
-	MaximumDelay           time.Duration `mapstructure:"maximumDelay"`
-	InitialConnectAttempts int           `mapstructure:"initialConnectAttempts"`
-	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval"`
+	APIEndpoint            string        `mapstructure:"apiEndpoint" json:"apiEndpoint" yaml:"apiEndpoint"`
+	WSPath                 string        `mapstructure:"wsPath" json:"wsPath" yaml:"wsPath"`
+	ReadBufferSize         int           `mapstructure:"readBufferSize" json:"readBufferSize" yaml:"readBufferSize"`
+	WriteBufferSize        int           `mapstructure:"writeBufferSize" json:"writeBufferSize" yaml:"writeBufferSize"`
+	InitialDelay           time.Duration `mapstructure:"initialDelay" json:"initialDelay" yaml:"initialDelay"`
+	MaximumDelay           time.Duration `mapstructure:"maximumDelay" json:"maximumDelay" yaml:"maximumDelay"`
+	InitialConnectAttempts int           `mapstructure:"initialConnectAttempts" json:"initialConnectAttempts" yaml:"initialConnectAttempts"`
+	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
 }
 
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
@@ -65,20 +101,20 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
 }
 
 var (
-	// PerfCmdBroadcast sends broadcast messages
-	PerfCmdBroadcast fftypes.FFEnum = "msg_broadcast"
-	// PerfCmdPrivateMsg sends private messages to a recipient in the consortium
-	PerfCmdPrivateMsg fftypes.FFEnum = "msg_private"
-	// PerfCmdTokenMint mints tokens in a token pool
-	PerfCmdTokenMint fftypes.FFEnum = "token_mint"
-	// PerfCmdCustomEthereumContract invokes a custom smart contract and checks events emitted by it
-	PerfCmdCustomEthereumContract fftypes.FFEnum = "custom_ethereum_contract"
-	// PerfCmdCustomFabricContract invokes a custom smart contract and checks events emitted by it
-	PerfCmdCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
-	// PerfBlobBroadcast broadcasts a blob
-	PerfBlobBroadcast fftypes.FFEnum = "blob_broadcast"
-	// PerfBlobBroadcast broadcasts a blob
-	PerfBlobPrivateMsg fftypes.FFEnum = "blob_private"
+	// PerfTestBroadcast sends broadcast messages
+	PerfTestBroadcast fftypes.FFEnum = "msg_broadcast"
+	// PerfTestPrivateMsg sends private messages to a recipient in the consortium
+	PerfTestPrivateMsg fftypes.FFEnum = "msg_private"
+	// PerfTestTokenMint mints tokens in a token pool
+	PerfTestTokenMint fftypes.FFEnum = "token_mint"
+	// PerfTestCustomEthereumContract invokes a custom smart contract and checks events emitted by it
+	PerfTestCustomEthereumContract fftypes.FFEnum = "custom_ethereum_contract"
+	// PerfTestCustomFabricContract invokes a custom smart contract and checks events emitted by it
+	PerfTestCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
+	// PerfTestBlobBroadcast broadcasts a blob
+	PerfTestBlobBroadcast fftypes.FFEnum = "blob_broadcast"
+	// PerfTestBlobPrivateMsg privately sends a blob
+	PerfTestBlobPrivateMsg fftypes.FFEnum = "blob_private"
 )
 
 var (
@@ -88,21 +124,12 @@ var (
 	DelinquentActionLog fftypes.FFEnum = "log"
 )
 
-var ValidPerfCommands = map[string]fftypes.FFEnum{
-	PerfCmdBroadcast.String():              PerfCmdBroadcast,
-	PerfCmdPrivateMsg.String():             PerfCmdPrivateMsg,
-	PerfCmdTokenMint.String():              PerfCmdTokenMint,
-	PerfCmdCustomEthereumContract.String(): PerfCmdCustomEthereumContract,
-	PerfCmdCustomFabricContract.String():   PerfCmdCustomFabricContract,
-	PerfBlobBroadcast.String():             PerfBlobBroadcast,
-	PerfBlobPrivateMsg.String():            PerfBlobPrivateMsg,
-}
-
-func ValidCommandsString() []string {
-	keys := make([]string, 0, len(ValidPerfCommands))
-	for key := range ValidPerfCommands {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	return keys
+var ValidPerfTests = map[string]fftypes.FFEnum{
+	PerfTestBroadcast.String():              PerfTestBroadcast,
+	PerfTestPrivateMsg.String():             PerfTestPrivateMsg,
+	PerfTestTokenMint.String():              PerfTestTokenMint,
+	PerfTestCustomEthereumContract.String(): PerfTestCustomEthereumContract,
+	PerfTestCustomFabricContract.String():   PerfTestCustomFabricContract,
+	PerfTestBlobBroadcast.String():          PerfTestBlobBroadcast,
+	PerfTestBlobPrivateMsg.String():         PerfTestBlobPrivateMsg,
 }

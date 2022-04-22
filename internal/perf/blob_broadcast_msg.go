@@ -2,6 +2,7 @@ package perf
 
 import (
 	"fmt"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"math/big"
 
 	"github.com/hyperledger/firefly/pkg/fftypes"
@@ -21,7 +22,7 @@ func newBlobBroadcastTestWorker(pr *perfRunner, workerID int) TestCase {
 }
 
 func (tc *blobBroadcast) Name() string {
-	return "Blob Broadcast"
+	return conf.PerfTestBlobBroadcast.String()
 }
 
 func (tc *blobBroadcast) IDType() TrackingIDType {

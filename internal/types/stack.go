@@ -45,8 +45,12 @@ type Member struct {
 	ExposedUIPort             int    `json:"exposedUiPort,omitempty"`
 	ExposedTokensPorts        []int  `json:"exposedTokensPorts,omitempty"`
 	External                  bool   `json:"external,omitempty"`
+	FireflyHostname           string `json:"fireflyHostname,omitempty"`
 	OrgName                   string `json:"orgName,omitempty"`
 	NodeName                  string `json:"nodeName,omitempty"`
+	Username                  string `json:"username,omitempty"`
+	Password                  string `json:"password,omitempty"`
+	UseHTTPS                  bool   `json:"useHttps,omitempty"`
 }
 
 type TokenProvider string
