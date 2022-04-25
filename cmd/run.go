@@ -138,8 +138,8 @@ func selectInstance(config *conf.PerformanceTestConfig) (*conf.InstanceConfig, e
 	return nil, errors.Errorf("please set either the \"instance-name\" or \"instance-index\" ")
 }
 
-func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig *conf.PerformanceTestConfig) (*conf.PerfRunnerConfig, error) {
-	runnerConfig := &conf.PerfRunnerConfig{
+func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig *conf.PerformanceTestConfig) (*conf.RunnerConfig, error) {
+	runnerConfig := &conf.RunnerConfig{
 		Tests: instance.Tests,
 	}
 
@@ -164,7 +164,6 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.MessageOptions = instance.MessageOptions
 	runnerConfig.TokenOptions = instance.TokenOptions
 	runnerConfig.ContractOptions = instance.ContractOptions
-	runnerConfig.Workers = instance.Workers
 	runnerConfig.Length = instance.Length
 	runnerConfig.WebSocket = perfConfig.WSConfig
 	runnerConfig.Daemon = perfConfig.Daemon
@@ -184,7 +183,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	return runnerConfig, nil
 }
 
-func validateConfig(cfg conf.PerfRunnerConfig) error {
+func validateConfig(cfg conf.RunnerConfig) error {
 	if cfg.TokenOptions.TokenType != "" && cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
 		return fmt.Errorf("invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String())
 	}

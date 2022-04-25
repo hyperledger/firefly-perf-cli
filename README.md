@@ -1,45 +1,58 @@
 # FireFly Performance CLI
 
-FireFly Performance CLI is a HTTP load testing tool that generates a constant request rate against a [FireFly](https://github.com/hyperledger/firefly) network and measure performance. This it to be confident [FireFly](https://github.com/hyperledger/firefly) can perform under normal conditions for an extended period of time.
+FireFly Performance CLI is a HTTP load testing tool that generates a constant request rate against a [FireFly](https://github.com/hyperledger/firefly)
+network and measure performance. This used to confirm confidence that [FireFly](https://github.com/hyperledger/firefly)
+can perform under normal conditions for an extended period of time.
 
 ## Items Subject to Testing
 
-- [x] Broadcasts (`POST /messages/broadcasts`)
-- [x] Private Messaging (`POST /messages/private`)
-- [x] Mint Tokens (`POST /tokens/mint`)
-- [x] Fungible vs. Non-Fungible Token Toggle
-- [x] Blobs
+- Broadcasts (`POST /messages/broadcasts`)
+- Private Messaging (`POST /messages/private`)
+- Mint Tokens (`POST /tokens/mint`)
+  - Fungible vs. Non-Fungible Token Toggle
+- Blobs
+- Contract Invocation (`POST /contracts/invoke`)
+  - Ethereum vs. Fabric
 
-## Run a test
+## Run
 
-`ffperf run-tests msg_broadcast -l 24h`
+The test configuration is structured around running `ffperf` as either a single process or in a distributed fashion as
+multiple processes.
+
+In the test configuration you define one or more test _instances_ for a single `ffperf` process to run. An instance then
+describes running one or more test _cases_ with a dedicated number of goroutine _workers_ against a _sender_ org and
+a _recipient_ org. The test configuration consumes a file reference to the stack JSON configuration produced by the
+[`ff` CLI](https://github.com/firefly-cli) (or can be defined manually) to understand the network topology, so that
+sender's and recipient's just refer to indices within the stack.
+
+As a result, running the CLI consists of providing an `instances.yaml` file describe the test configuration
+and an instance index or name indicating which instance the process should run:
+
+```shell
+ffperf run -c /path/to/instances.yaml -i 0
+```
+
+See [`example-instances.yaml`](config/example-instances.yaml) for examples of how to define multiple instances
+and multiple test cases per instance with all the various options.
 
 ## Options
 
-```shell
+```
+Executes a instance within a performance test suite to generate synthetic load across multiple FireFly nodes within a network
+
 Usage:
-  ffperf run-tests [flags]
+  ffperf run [flags]
 
 Flags:
-  -a, --address string            Address of custom contract
-      --chaincode string          Chaincode name for custom contract
-      --channel string            Fabric channel for custom contract
-  -h, --help                      help for run-tests
-  -l, --length duration           Length of entire performance test (default 1m0s)
-      --longMessage               Include long string in message
-  -r, --recipient string          Recipient for FireFly messages
-  -x, --recipientAddress string   Recipient address for FireFly transfers
-  -s, --stackJSON string          Path to stack.json file that describes the network to test
-      --tokenType string          [fungible nonfungible] (default "fungible")
-  -w, --workers int               Number of workers at a time (default 1)
+  -c, --config string          Path to performance config that describes the network and test instances
+  -d, --daemon                 Run in long-lived, daemon mode. Any provided test length is ignored.
+      --delinquent string      Action to take when delinquent messages are detected. Valid options: [exit log] (default "exit")
+  -h, --help                   help for run
+  -i, --instance-idx int       Index of the instance within performance config to run against the network (default -1)
+  -n, --instance-name string   Instance within performance config to run against the network
 )
 ```
 
-## Examples
+## Distributed Deployment
 
-- 10 workers submit broadcast messages for 500 hours
-
-  - `ffperf run-tests msg_broadcast -l 500h -w 10`
-
-- 75 workers submit broadcast messages, private messages, and token mints for 10 hours. 25 workers per item
-  - `ffperf run-tests msg_broadcast msg_private token_mint -l 10h -r "0x123" -w 75`
+See the [`ffperf` Helm chart](charts/ffperf) for running multiple instances of `ffperf` using Kubernetes.

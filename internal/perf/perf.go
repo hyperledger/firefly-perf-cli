@@ -89,7 +89,7 @@ type inflightTest struct {
 
 type perfRunner struct {
 	bfr             chan int
-	cfg             *conf.PerfRunnerConfig
+	cfg             *conf.RunnerConfig
 	client          *resty.Client
 	ctx             context.Context
 	shutdown        context.CancelFunc
@@ -104,6 +104,7 @@ type perfRunner struct {
 	subscriptionMap map[string]SubscriptionInfo
 	daemon          bool
 	sender          string
+	totalWorkers    int
 }
 
 type SubscriptionInfo struct {
@@ -111,12 +112,17 @@ type SubscriptionInfo struct {
 	Job     fftypes.FFEnum
 }
 
-func New(config *conf.PerfRunnerConfig) PerfRunner {
+func New(config *conf.RunnerConfig) PerfRunner {
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
+
+	totalWorkers := 0
+	for _, test := range config.Tests {
+		totalWorkers += test.Workers
+	}
 
 	// Create channel based dispatch for workers
 	var wsReceivers []chan string
-	for i := 0; i < config.Workers; i++ {
+	for i := 0; i < totalWorkers; i++ {
 		wsReceivers = append(wsReceivers, make(chan string))
 	}
 
@@ -124,7 +130,7 @@ func New(config *conf.PerfRunnerConfig) PerfRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	pr := &perfRunner{
-		bfr:             make(chan int, config.Workers),
+		bfr:             make(chan int, totalWorkers),
 		cfg:             config,
 		ctx:             ctx,
 		shutdown:        cancel,
@@ -138,6 +144,7 @@ func New(config *conf.PerfRunnerConfig) PerfRunner {
 		subscriptionMap: make(map[string]SubscriptionInfo),
 		daemon:          config.Daemon,
 		sender:          config.SenderURL,
+		totalWorkers:    totalWorkers,
 	}
 
 	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
@@ -164,7 +171,7 @@ func (pr *perfRunner) Init() (err error) {
 
 func (pr *perfRunner) Start() (err error) {
 	// Create token pool, if needed
-	if containsTargetCmd(pr.cfg.Tests, conf.PerfTestTokenMint) {
+	if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) {
 		err = pr.CreateTokenPool()
 		if err != nil {
 			return err
@@ -174,7 +181,7 @@ func (pr *perfRunner) Start() (err error) {
 	for _, nodeURL := range pr.nodeURLs {
 		// Create contract sub and listener, if needed
 		var listenerID string
-		if containsTargetCmd(pr.cfg.Tests, conf.PerfTestCustomEthereumContract) {
+		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomEthereumContract) {
 			listenerID, err = pr.createEthereumContractListener(nodeURL)
 			if err != nil {
 				return err
@@ -189,7 +196,7 @@ func (pr *perfRunner) Start() (err error) {
 			}
 		}
 
-		if containsTargetCmd(pr.cfg.Tests, conf.PerfTestCustomFabricContract) {
+		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomFabricContract) {
 			listenerID, err = pr.createFabricContractListener(nodeURL)
 			if err != nil {
 				return err
@@ -234,36 +241,40 @@ func (pr *perfRunner) Start() (err error) {
 		go pr.eventLoop(pr.nodeURLs[i], wsconn)
 	}
 
-	for id := 0; id < pr.cfg.Workers; id++ {
-		ptr := id % len(pr.cfg.Tests)
-		var tc TestCase
+	id := 0
+	for _, test := range pr.cfg.Tests {
+		log.Infof("Starting %d workers for case \"%s\"", test.Workers, test.Name)
+		for iWorker := 0; iWorker < test.Workers; iWorker++ {
+			var tc TestCase
 
-		testCaseName := pr.cfg.Tests[ptr]
-		switch testCaseName {
-		case conf.PerfTestBroadcast:
-			tc = newBroadcastTestWorker(pr, id)
-		case conf.PerfTestPrivateMsg:
-			tc = newPrivateTestWorker(pr, id)
-		case conf.PerfTestTokenMint:
-			tc = newTokenMintTestWorker(pr, id)
-		case conf.PerfTestCustomEthereumContract:
-			tc = newCustomEthereumTestWorker(pr, id)
-		case conf.PerfTestCustomFabricContract:
-			tc = newCustomFabricTestWorker(pr, id)
-		case conf.PerfTestBlobBroadcast:
-			tc = newBlobBroadcastTestWorker(pr, id)
-		case conf.PerfTestBlobPrivateMsg:
-			tc = newBlobPrivateTestWorker(pr, id)
-		default:
-			return fmt.Errorf("Unknown test case '%s'", testCaseName)
-		}
-
-		go func() {
-			err := pr.runLoop(tc)
-			if err != nil {
-				log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
+			switch test.Name {
+			case conf.PerfTestBroadcast:
+				tc = newBroadcastTestWorker(pr, id)
+			case conf.PerfTestPrivateMsg:
+				tc = newPrivateTestWorker(pr, id)
+			case conf.PerfTestTokenMint:
+				tc = newTokenMintTestWorker(pr, id)
+			case conf.PerfTestCustomEthereumContract:
+				tc = newCustomEthereumTestWorker(pr, id)
+			case conf.PerfTestCustomFabricContract:
+				tc = newCustomFabricTestWorker(pr, id)
+			case conf.PerfTestBlobBroadcast:
+				tc = newBlobBroadcastTestWorker(pr, id)
+			case conf.PerfTestBlobPrivateMsg:
+				tc = newBlobPrivateTestWorker(pr, id)
+			default:
+				return fmt.Errorf("Unknown test case '%s'", test.Name)
 			}
-		}()
+
+			go func() {
+				err := pr.runLoop(tc)
+				if err != nil {
+					log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
+				}
+			}()
+
+			id++
+		}
 	}
 
 	signalCh := make(chan os.Signal, 1)
@@ -455,7 +466,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, err error) {
 	var sub fftypes.Subscription
-	var readAhead uint16 = uint16(len(pr.wsReceivers))
+	readAhead := uint16(len(pr.wsReceivers))
 	subPayload := fftypes.Subscription{
 		SubscriptionRef: fftypes.SubscriptionRef{
 			Name:      name,
@@ -534,9 +545,9 @@ func (pr *perfRunner) startSubscription(wsconn wsclient.WSClient, name string) (
 	return nil
 }
 
-func containsTargetCmd(cmds []fftypes.FFEnum, target fftypes.FFEnum) bool {
-	for _, cmd := range cmds {
-		if cmd == target {
+func containsTargetTest(tests []conf.TestCaseConfig, target fftypes.FFEnum) bool {
+	for _, test := range tests {
+		if test.Name == target {
 			return true
 		}
 	}
