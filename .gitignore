@@ -8,3 +8,4 @@ dist/
 .idea/
 
 **/local-values*.yaml
+charts/**/*.tgz

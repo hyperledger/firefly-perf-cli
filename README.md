@@ -21,7 +21,7 @@ multiple processes.
 
 In the test configuration you define one or more test _instances_ for a single `ffperf` process to run. An instance then
 describes running one or more test _cases_ with a dedicated number of goroutine _workers_ against a _sender_ org and
-a _recipient_ org. The test configuration consumes a reference the stack JSON configuration produced by the
+a _recipient_ org. The test configuration consumes a file reference to the stack JSON configuration produced by the
 [`ff` CLI](https://github.com/firefly-cli) (or can be defined manually) to understand the network topology, so that
 sender's and recipient's just refer to indices within the stack.
 
