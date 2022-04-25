@@ -24,6 +24,45 @@ import (
 	"github.com/hyperledger/firefly/pkg/wsclient"
 )
 
+type RunnerConfig struct {
+	Tests            []TestCaseConfig
+	Length           time.Duration
+	MessageOptions   MessageOptions
+	RecipientOrg     string
+	RecipientAddress string
+	TokenOptions     TokenOptions
+	ContractOptions  ContractOptions
+	WebSocket        FireFlyWsConfig
+	NodeURLs         []string
+	StackJSONPath    string
+	DelinquentAction string
+	Daemon           bool
+	SenderURL        string
+}
+
+type PerformanceTestConfig struct {
+	StackJSONPath string           `json:"stackJSONPath" yaml:"stackJSONPath"`
+	Instances     []InstanceConfig `json:"instances" yaml:"instances"`
+	WSConfig      FireFlyWsConfig  `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`
+	Daemon        bool             `json:"daemon,omitempty" yaml:"daemon,omitempty"`
+}
+
+type InstanceConfig struct {
+	Name            string           `yaml:"name" json:"name"`
+	Tests           []TestCaseConfig `yaml:"tests" json:"tests"`
+	Length          time.Duration    `yaml:"length" json:"length"`
+	MessageOptions  MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender          int              `json:"sender" yaml:"sender"`
+	Recipient       *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	TokenOptions    TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+}
+
+type TestCaseConfig struct {
+	Name    fftypes.FFEnum `json:"name" yaml:"name"`
+	Workers int            `json:"workers" yaml:"workers"`
+}
+
 type MessageOptions struct {
 	LongMessage bool `json:"longMessage" yaml:"longMessage"`
 }
@@ -38,43 +77,7 @@ type ContractOptions struct {
 	Chaincode string `json:"chaincode" yaml:"chaincode"`
 }
 
-type PerfRunnerConfig struct {
-	Tests            []fftypes.FFEnum
-	Length           time.Duration
-	MessageOptions   MessageOptions
-	RecipientOrg     string
-	RecipientAddress string
-	TokenOptions     TokenOptions
-	ContractOptions  ContractOptions
-	WebSocket        FireFlyWsConf
-	Workers          int
-	NodeURLs         []string
-	StackJSONPath    string
-	DelinquentAction string
-	Daemon           bool
-	SenderURL        string
-}
-
-type PerformanceTestConfig struct {
-	StackJSONPath string           `json:"stackJSONPath" yaml:"stackJSONPath"`
-	Instances     []InstanceConfig `json:"instances" yaml:"instances"`
-	WSConfig      FireFlyWsConf    `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`
-	Daemon        bool             `json:"daemon,omitempty" yaml:"daemon,omitempty"`
-}
-
-type InstanceConfig struct {
-	Name            string           `yaml:"name" json:"name"`
-	Tests           []fftypes.FFEnum `yaml:"tests" json:"test"`
-	Length          time.Duration    `yaml:"length" json:"length"`
-	MessageOptions  MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Sender          int              `json:"sender" yaml:"sender"`
-	Recipient       *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	TokenOptions    TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	Workers         int              `json:"workers" yaml:"workers"`
-}
-
-type FireFlyWsConf struct {
+type FireFlyWsConfig struct {
 	APIEndpoint            string        `mapstructure:"apiEndpoint" json:"apiEndpoint" yaml:"apiEndpoint"`
 	WSPath                 string        `mapstructure:"wsPath" json:"wsPath" yaml:"wsPath"`
 	ReadBufferSize         int           `mapstructure:"readBufferSize" json:"readBufferSize" yaml:"readBufferSize"`
@@ -85,7 +88,7 @@ type FireFlyWsConf struct {
 	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
 }
 
-func GenerateWSConfig(nodeURL string, conf *FireFlyWsConf) *wsclient.WSConfig {
+func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig {
 	t, _ := url.QueryUnescape(conf.WSPath)
 
 	return &wsclient.WSConfig{

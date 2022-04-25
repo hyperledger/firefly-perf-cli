@@ -10,31 +10,33 @@ wsConfig:
   heartbeatInterval: 5s
 
 instances:
-  - name: ff0-broadcast
-    test: msg_broadcast
+  - name: ff0
+    tests:
+      - name: msg_broadcast
+        workers: 20
     length: 3m
     sender: 0
-    workers: 10
     messageOptions:
       longMessage: true
-  - name: ff0-ff0-private
-    test: msg_private
+  - name: ff0-ff1
+    tests:
+      - name: msg_private
+        workers: 10
+      - name: token_mint
+        workers: 5
     length: 3m
     sender: 0
     recipient: 1
-    workers: 10
     messageOptions:
       longMessage: true
-  - name: ff0-ff1-mint
-    test: token_mint
-    length: 3m
-    sender: 0
-    recipient: 1
-    workers: 10
     tokenOptions:
       tokenType: fungible
   - name: ff1
-    test: custom_ethereum_contract
+    tests:
+      - name: custom_ethereum_contract
+        workers: 10
+      - name: msg_broadcast
+        workers: 20
     length: 3m
     sender: 1
     workers: 10

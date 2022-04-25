@@ -43,11 +43,12 @@ wsConfig:
 
 instances: []
 #   - name: ff0-ff1-broadcast
-#     tests: ["msg_broadcast"]
+#     tests:
+#        - name: "msg_broadcast"
+#          workers: 10
 #     length: 5m
 #     sender: 0
 #     recipient: 1
-#     workers: 10
 #     messageOptions:
 #       longMessage: true
 
