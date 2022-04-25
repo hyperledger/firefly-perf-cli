@@ -241,14 +241,13 @@ func (pr *perfRunner) Start() (err error) {
 		go pr.eventLoop(pr.nodeURLs[i], wsconn)
 	}
 
+	id := 0
 	for _, test := range pr.cfg.Tests {
-		id := 0
-		testCaseName := test.Name
-
+		log.Infof("Starting %d workers for case \"%s\"", test.Workers, test.Name)
 		for iWorker := 0; iWorker < test.Workers; iWorker++ {
 			var tc TestCase
 
-			switch testCaseName {
+			switch test.Name {
 			case conf.PerfTestBroadcast:
 				tc = newBroadcastTestWorker(pr, id)
 			case conf.PerfTestPrivateMsg:
@@ -264,7 +263,7 @@ func (pr *perfRunner) Start() (err error) {
 			case conf.PerfTestBlobPrivateMsg:
 				tc = newBlobPrivateTestWorker(pr, id)
 			default:
-				return fmt.Errorf("Unknown test case '%s'", testCaseName)
+				return fmt.Errorf("Unknown test case '%s'", test.Name)
 			}
 
 			go func() {
