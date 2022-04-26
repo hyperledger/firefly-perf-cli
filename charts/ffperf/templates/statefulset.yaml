@@ -36,6 +36,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
+        {{- toYaml .Values.podLabels | nindent 8 }}
         {{- include "ffperf.selectorLabels" . | nindent 8 }}
     spec:
       terminationGracePeriodSeconds: 60
