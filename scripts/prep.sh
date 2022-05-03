@@ -41,15 +41,30 @@ ff remove -f $OLD_STACK_NAME
 printf "${PURPLE}Creating FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc1155 -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --ethconnect-config ethconnect.yml --core-config core-config.yml
 
-cat ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml | yq '
-  .services.firefly_core_0.logging.options.max-file = "250" |
-  .services.firefly_core_0.logging.options.max-size = "500m"
-  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml
-
-cat ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml | yq '
-  .services.firefly_core_1.logging.options.max-file = "250" |
-  .services.firefly_core_1.logging.options.max-size = "500m"
-  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml
+cat <<EOF > ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.override.yml
+version: "2.1"
+services:
+  firefly_core_0:
+    logging:
+      options:
+        max-file: "250"
+        max_size: "500m"
+  firefly_core_1:
+    logging:
+      options:
+        max-file: "250"
+        max_size: "500m"
+  ethconnect_0:
+    logging:
+      options:
+        max-file: "250"
+        max_size: "500m"
+  ethconnect_1:
+    logging:
+      options:
+        max-file: "250"
+        max_size: "500m"
+EOF
 
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff start $NEW_STACK_NAME --verbose --no-rollback
@@ -58,14 +73,14 @@ cd $BASE_PATH
 
 printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
-TESTS='{"name": "msg_broadcast", "workers":50},{"name": "msg_private", "workers":50},{"name": "blob_broadcast", "workers":50},{"name": "blob_private", "workers":50}'
+TESTS='{"name": "msg_broadcast", "workers":50},{"name": "msg_private", "workers":50},{"name": "blob_broadcast", "workers":30},{"name": "blob_private", "workers":30}'
 
 if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/simplestorage/simple_storage.json | jq -r '.address')
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
-    TESTS="${TESTS},{\"name\": \"custom_ethereum_contract\", \"workers\":25},{\"name\": \"token_mint\", \"workers\":25}"
+    TESTS="${TESTS},{\"name\": \"custom_ethereum_contract\", \"workers\":20},{\"name\": \"token_mint\", \"workers\":10}"
     CONTRACT_OPTIONS="{\"address\": \"${CONTRACT_ADDRESS}\"}"
 elif [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
     docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
