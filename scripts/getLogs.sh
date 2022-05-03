@@ -7,6 +7,7 @@ if [ $# -ne 1 ]; then
     printf "${RED}Must provide stack name as argument${NC}\n"
     exit 1
 fi
+STACK_NAME=$1
 
 cd ~/ffperf-testing
 
@@ -15,18 +16,24 @@ DIRNAME="ff_logs_$(TZ=":US/Eastern" date +%m_%d_%Y_%I_%M_%p)"
 mkdir ~/ffperf-testing/$DIRNAME
 
 # Copy ffperf logs
-cp ~/ffperf-testing/ffperf*.log ~/ffperf-testing/$DIRNAME
+tail -n 100000 ~/ffperf-testing/ffperf.log > ~/ffperf-testing/$DIRNAME/ffperf_l100k.txt
 
-# Fetch firefly_core_0 logs
-LOG_PATH=$(docker inspect --format='{{.LogPath}}' "$1_firefly_core_0")
-LOG_FILE=$(basename $LOG_PATH)
-sudo cp $LOG_PATH ./$DIRNAME/log_firefly_core_0.log
-sudo chmod 777 ./$DIRNAME/log_firefly_core_0.log
-gzip ./$DIRNAME/log_firefly_core_0.log
+function getLogs() {
+    local container_name = $1
+    local log_path=$(docker inspect --format='{{.LogPath}}' "$STACK_NAME_$container_name")
+    local log_file_base=$(basename $log_path)
+    # Get the base log file
+    sudo cp $log_path ./$DIRNAME/log_${container_name}.log
+    sudo chmod 777 ./$DIRNAME/log_${container_name}.log
+    gzip ./$DIRNAME/log_${container_name}.log
+    # Get one historical log file too
+    sudo cp $log_path.1 ./$DIRNAME/log_${container_name}.log.1
+    sudo chmod 777 ./$DIRNAME/log_${container_name}.log.1
+    gzip ./$DIRNAME/log_${container_name}.log.1
+}
 
-# Fetch ethconnect_0 logs
-LOG_PATH=$(docker inspect --format='{{.LogPath}}' "$1_ethconnect_0")
-LOG_FILE=$(basename $LOG_PATH)
-sudo cp $LOG_PATH ./$DIRNAME/log_ethconnect_0.log
-sudo chmod 777 ./$DIRNAME/log_ethconnect_0.log
-gzip ./$DIRNAME/log_ethconnect_0.log
+
+getLogs 'firefly_core_0'
+getLogs 'firefly_core_1'
+getLogs 'ethconnect_0'
+getLogs 'ethconnect_1'

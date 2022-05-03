@@ -41,15 +41,15 @@ ff remove -f $OLD_STACK_NAME
 printf "${PURPLE}Creating FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc1155 -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --ethconnect-config ethconnect.yml --core-config core-config.yml
 
-cat ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml | yq '
+cat ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.yml | yq '
   .services.firefly_core_0.logging.options.max-file = "250" |
   .services.firefly_core_0.logging.options.max-size = "500m"
-  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml
+  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.yml
 
-cat ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml | yq '
+cat ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.yml | yq '
   .services.firefly_core_1.logging.options.max-file = "250" |
   .services.firefly_core_1.logging.options.max-size = "500m"
-  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/init/docker-compose.yml
+  ' > /tmp/docker-compose.yml && cp /tmp/docker-compose.yml ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.yml
 
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
 ff start $NEW_STACK_NAME --verbose --no-rollback
