@@ -48,22 +48,22 @@ services:
     logging:
       options:
         max-file: "250"
-        max_size: "500m"
+        max-size: "500m"
   firefly_core_1:
     logging:
       options:
         max-file: "250"
-        max_size: "500m"
+        max-size: "500m"
   ethconnect_0:
     logging:
       options:
         max-file: "250"
-        max_size: "500m"
+        max-size: "500m"
   ethconnect_1:
     logging:
       options:
         max-file: "250"
-        max_size: "500m"
+        max-size: "500m"
 EOF
 
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
