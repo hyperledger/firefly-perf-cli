@@ -26,7 +26,7 @@ import (
 func (pr *perfRunner) CreateTokenPool() error {
 	log.Infof("Creating Token Pool: %s", pr.poolName)
 	body := fftypes.TokenPool{
-		Connector: "erc1155",
+		Connector: "erc20_erc721",
 		Name:      pr.poolName,
 		Type:      getTokenTypeEnum(pr.cfg.TokenOptions.TokenType),
 	}
