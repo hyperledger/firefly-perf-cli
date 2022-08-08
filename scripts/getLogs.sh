@@ -19,8 +19,8 @@ mkdir ~/ffperf-testing/$DIRNAME
 tail -n 100000 ~/ffperf-testing/ffperf.log > ~/ffperf-testing/$DIRNAME/ffperf_l100k.txt
 
 function getLogs() {
-    local container_name = $1
-    local log_path=$(docker inspect --format='{{.LogPath}}' "$STACK_NAME_$container_name")
+    local container_name=$1
+    local log_path=$(docker inspect --format='{{.LogPath}}' "${STACK_NAME}_${container_name}")
     local log_file_base=$(basename $log_path)
     # Get the base log file
     sudo cp $log_path ./$DIRNAME/log_${container_name}.log
