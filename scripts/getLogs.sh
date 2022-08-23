@@ -35,5 +35,7 @@ function getLogs() {
 
 getLogs 'firefly_core_0'
 getLogs 'firefly_core_1'
-getLogs 'ethconnect_0'
-getLogs 'ethconnect_1'
+getLogs 'evmconnect_0'
+getLogs 'evmconnect_1'
+getLogs 'postgres_0'
+getLogs 'postgres_1'
