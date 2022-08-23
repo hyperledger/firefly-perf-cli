@@ -32,7 +32,6 @@ func (pr *perfRunner) CreateTokenPool() error {
 	}
 
 	res, err := pr.client.R().
-		SetHeader("Request-Timeout", "15s").
 		SetBody(&body).
 		Post("/api/v1/namespaces/default/tokens/pools?confirm=true")
 
