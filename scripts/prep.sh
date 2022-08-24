@@ -39,7 +39,7 @@ ff remove -f $OLD_STACK_NAME
 
 # Create new Firefly stack
 printf "${PURPLE}Creating FireFly Stack: $NEW_STACK_NAME...\n${NC}"
-ff init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc1155 -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --ethconnect-config ethconnect.yml --core-config core-config.yml
+ff init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc20_erc721 -c evmconnect -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --connector-config ethconnect.yml --core-config core-config.yml
 
 cat <<EOF > ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.override.yml
 version: "2.1"
@@ -54,16 +54,20 @@ services:
       options:
         max-file: "250"
         max-size: "500m"
-  ethconnect_0:
+  evmconnect_0:
     logging:
       options:
         max-file: "250"
         max-size: "500m"
-  ethconnect_1:
+  evmconnect_1:
     logging:
       options:
         max-file: "250"
         max-size: "500m"
+  postgres_0:
+    command: postgres -c log_min_duration_statement=500
+  postgres_1:
+    command: postgres -c log_min_duration_statement=500
 EOF
 
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
@@ -114,12 +118,18 @@ instances:
     contractOptions: ${CONTRACT_OPTIONS}
 EOF
 
+cat <<EOF > start.sh
+ffperf run -c $BASE_PATH/instances.yml -n long-run
+docker exec ${NEW_STACK_NAME}_firefly_core_0 /bin/sh -c "curl 0.0.0.0:6060/debug/pprof/profile" > ${NEW_STACK_NAME}.prof
+echo "Profiling data saved to ${NEW_STACK_NAME}.prof"
+EOF
+
 echo "FLAGS=$FLAGS"
 
 printf "${PURPLE}Modify $BASE_PATH/instances.yml and the commnd below and run...\n${NC}"
 
 echo '```'
-printf "${GREEN}nohup ffperf run -c $BASE_PATH/instances.yml -n long-run &> ffperf.log &${NC}\n"
+printf "${GREEN}nohup ./start.sh &> ffperf.log &${NC}\n"
 echo '```'
 
 echo "core-config.yml"
