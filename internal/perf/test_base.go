@@ -8,7 +8,8 @@ import (
 	"math/big"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly/pkg/core"
 )
 
 type testBase struct {
@@ -52,7 +53,7 @@ func (t *testBase) generateBlob(length *big.Int) ([]byte, [32]byte) {
 }
 
 func (t *testBase) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (string, error) {
-	var data fftypes.Data
+	var data core.Data
 	formData := map[string]string{}
 	// If there's no datatype, tell FireFly to automatically add a data payload
 	formData["autometa"] = "true"
@@ -62,7 +63,7 @@ func (t *testBase) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (strin
 		SetFormData(formData).
 		SetFileReader("file", "myfile.txt", bytes.NewReader(blob)).
 		SetResult(&data).
-		Post(nodeURL + "/api/v1/namespaces/default/data")
+		Post(fmt.Sprintf("%s/api/v1/namespaces/%s/data", nodeURL, t.pr.cfg.FFNamespace))
 	if err != nil {
 		return "", nil
 	}
@@ -83,7 +84,7 @@ func (t *testBase) downloadAndVerifyBlob(nodeURL, id string, expectedHash [32]by
 			"Content-Type": "application/json",
 		}).
 		SetResult(&blob).
-		Get(fmt.Sprintf("%s/api/v1/namespaces/default/data/%s/blob", nodeURL, id))
+		Get(fmt.Sprintf("%s/api/v1/namespaces/%s/data/%s/blob", nodeURL, t.pr.cfg.FFNamespace, id))
 	if err != nil {
 		return err
 	}

@@ -18,10 +18,11 @@ package perf
 
 import (
 	"fmt"
-	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"strconv"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 type customFabric struct {
@@ -70,7 +71,7 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"name": "%v"
 		}
 	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, tc.workerID)
-	var resContractCall fftypes.ContractCallResponse
+	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
@@ -80,7 +81,7 @@ func (tc *customFabric) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resContractCall).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/contracts/invoke", tc.pr.client.BaseURL))
+		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}

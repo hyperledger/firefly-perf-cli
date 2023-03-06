@@ -1,0 +1,30 @@
+wsConfig:
+  wsPath: /ws
+  readBufferSize: 16000
+  writeBufferSize: 16000
+  initialDelay: 250ms
+  maximumDelay: 300s
+  initialConnectAttempts: 5
+  heartbeatInterval: 300s
+
+nodes:
+  - name: node1
+    apiEndpoint: https://my.firefly.node/
+    authUsername: myuser
+    authPassword: mypassw0rd
+
+instances:
+  - name: test1
+    manualNodeIndex: 0
+    tests:
+      - name: token_mint
+        workers: 4
+    fireflyNamespace: default
+    maxTimePerAction: 300s
+    tokenOptions:
+      tokenType: nonfungible
+      mintRecipient: 0xcd833ed165a7b26b68a3cb97daede71691dcaf97
+      supportsData: false
+      supportsURI: true
+      existingPoolName: tokenpool1
+    length: 3h
