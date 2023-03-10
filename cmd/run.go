@@ -21,12 +21,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"path"
+	"time"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/hyperledger/firefly-perf-cli/internal/server"
 	"github.com/hyperledger/firefly-perf-cli/internal/types"
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly/pkg/core"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -143,37 +144,92 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		Tests: instance.Tests,
 	}
 
-	runnerConfig.StackJSONPath = perfConfig.StackJSONPath
-	stack, stackErr := readStackJSON(runnerConfig.StackJSONPath)
-	if stackErr != nil {
-		return nil, stackErr
-	}
-	runnerConfig.NodeURLs = make([]string, len(stack.Members))
-	for i, member := range stack.Members {
-		if member.FireflyHostname == "" {
-			member.FireflyHostname = "localhost"
-		}
-		scheme := "http"
-		if member.UseHTTPS {
-			scheme = "https"
-		}
-
-		runnerConfig.NodeURLs[i] = fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort)
-	}
-
-	runnerConfig.MessageOptions = instance.MessageOptions
-	runnerConfig.TokenOptions = instance.TokenOptions
-	runnerConfig.ContractOptions = instance.ContractOptions
-	runnerConfig.Length = instance.Length
 	runnerConfig.WebSocket = perfConfig.WSConfig
-	runnerConfig.Daemon = perfConfig.Daemon
-	runnerConfig.DelinquentAction = deliquentAction
 
-	runnerConfig.SenderURL = runnerConfig.NodeURLs[instance.Sender]
-	if instance.Recipient != nil {
-		runnerConfig.RecipientOrg = fmt.Sprintf("did:firefly:org/%s", stack.Members[*instance.Recipient].OrgName)
-		runnerConfig.RecipientAddress = stack.Members[*instance.Recipient].Address
+	if len(perfConfig.Nodes) > 0 {
+		// Use node configuration defined in the ffperf config file
+		if (instance.ManualNodeIndex + 1) > len(perfConfig.Nodes) {
+			log.Errorf("NodeIndex %d not valid - only %d nodes have been configured\n", instanceIndex, len(perfConfig.Nodes))
+			return nil, errors.Errorf("Invalid manual node configuration")
+		}
+
+		if perfConfig.StackJSONPath != "" {
+			log.Error("FireFly performance CLI cannot be configured with manual nodes and a local FireFly stack")
+			return nil, errors.Errorf("Invalid manual node configuration")
+		}
+
+		// Use manual endpoint configuration instead of getting it from a FireFly stack
+		log.Infof("Running test against manual endpoint \"%s\"\n", perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
+
+		runnerConfig.TokenOptions = instance.TokenOptions
+		runnerConfig.NodeURLs = make([]string, 0)
+		runnerConfig.NodeURLs = append(runnerConfig.NodeURLs, perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
+		runnerConfig.SenderURL = runnerConfig.NodeURLs[0]
+		runnerConfig.RecipientAddress = instance.TokenOptions.RecipientAddress
+		runnerConfig.SigningAddress = instance.SigningAddress
+
+		if perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername != "" {
+			runnerConfig.WebSocket.AuthUsername = perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername
+		}
+
+		if perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword != "" {
+			runnerConfig.WebSocket.AuthPassword = perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword
+		}
+	} else {
+		// Read endpoint information from the stack JSON
+		log.Infof("Running test against stack \"%s\"\n", perfConfig.StackJSONPath)
+
+		runnerConfig.StackJSONPath = perfConfig.StackJSONPath
+		stack, stackErr := readStackJSON(runnerConfig.StackJSONPath)
+		if stackErr != nil {
+			fmt.Println("Err")
+			fmt.Println(stackErr)
+			return nil, stackErr
+		}
+		runnerConfig.NodeURLs = make([]string, len(stack.Members))
+		for i, member := range stack.Members {
+			if member.FireflyHostname == "" {
+				member.FireflyHostname = "localhost"
+			}
+			scheme := "http"
+			if member.UseHTTPS {
+				scheme = "https"
+			}
+
+			runnerConfig.NodeURLs[i] = fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort)
+		}
+
+		runnerConfig.MessageOptions = instance.MessageOptions
+		runnerConfig.TokenOptions = instance.TokenOptions
+		runnerConfig.ContractOptions = instance.ContractOptions
+
+		runnerConfig.SenderURL = runnerConfig.NodeURLs[instance.Sender]
+		if instance.Recipient != nil {
+			runnerConfig.RecipientOrg = fmt.Sprintf("did:firefly:org/%s", stack.Members[*instance.Recipient].OrgName)
+			runnerConfig.RecipientAddress = stack.Members[*instance.Recipient].Address
+		}
 	}
+
+	// Common configuration regardless of running with manually defined nodes or a local stack
+	runnerConfig.SkipMintConfirmations = instance.SkipMintConfirmations
+	runnerConfig.Length = instance.Length
+	runnerConfig.Daemon = perfConfig.Daemon
+	runnerConfig.LogEvents = perfConfig.LogEvents
+	runnerConfig.DelinquentAction = deliquentAction
+	runnerConfig.FFNamespace = instance.FFNamespace
+	runnerConfig.APIPrefix = instance.APIPrefix
+	runnerConfig.MaxTimePerAction = instance.MaxTimePerAction
+	runnerConfig.MaxActions = instance.MaxActions
+	runnerConfig.StartRate = instance.StartRate
+	runnerConfig.EndRate = instance.EndRate
+	runnerConfig.RateRampUpTime = instance.RateRampUpTime
+
+	// If delinquent action has been set on the test run instance this overrides the command line
+	if instance.DelinquentAction != "" {
+		runnerConfig.DelinquentAction = instance.DelinquentAction
+	}
+
+	setDefaults(runnerConfig)
 
 	err := validateConfig(*runnerConfig)
 	if err != nil {
@@ -183,9 +239,26 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	return runnerConfig, nil
 }
 
+func setDefaults(runnerConfig *conf.RunnerConfig) {
+	if runnerConfig.FFNamespace == "" {
+		runnerConfig.FFNamespace = "default"
+	}
+	if runnerConfig.TokenOptions.TokenPoolConnectorName == "" {
+		runnerConfig.TokenOptions.TokenPoolConnectorName = "erc20_erc721"
+	}
+	if runnerConfig.MaxTimePerAction.Seconds() == 0 {
+		runnerConfig.MaxTimePerAction = 60 * time.Second
+	}
+	if runnerConfig.StartRate == 0 {
+		runnerConfig.StartRate = runnerConfig.EndRate
+	} else if runnerConfig.EndRate == 0 {
+		runnerConfig.EndRate = runnerConfig.StartRate
+	}
+}
+
 func validateConfig(cfg conf.RunnerConfig) error {
-	if cfg.TokenOptions.TokenType != "" && cfg.TokenOptions.TokenType != fftypes.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != fftypes.TokenTypeNonFungible.String() {
-		return fmt.Errorf("invalid token type. Choose from [%s %s]", fftypes.TokenTypeFungible.String(), fftypes.TokenTypeNonFungible.String())
+	if cfg.TokenOptions.TokenType != "" && cfg.TokenOptions.TokenType != core.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != core.TokenTypeNonFungible.String() {
+		return fmt.Errorf("invalid token type. Choose from [%s %s]", core.TokenTypeFungible.String(), core.TokenTypeNonFungible.String())
 	}
 	return nil
 }

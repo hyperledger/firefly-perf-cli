@@ -20,24 +20,34 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
-	"github.com/hyperledger/firefly/pkg/wsclient"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/wsclient"
 )
 
 type RunnerConfig struct {
-	Tests            []TestCaseConfig
-	Length           time.Duration
-	MessageOptions   MessageOptions
-	RecipientOrg     string
-	RecipientAddress string
-	TokenOptions     TokenOptions
-	ContractOptions  ContractOptions
-	WebSocket        FireFlyWsConfig
-	NodeURLs         []string
-	StackJSONPath    string
-	DelinquentAction string
-	Daemon           bool
-	SenderURL        string
+	Tests                 []TestCaseConfig
+	Length                time.Duration
+	MessageOptions        MessageOptions
+	RecipientOrg          string
+	RecipientAddress      string
+	SigningAddress        string
+	TokenOptions          TokenOptions
+	ContractOptions       ContractOptions
+	WebSocket             FireFlyWsConfig
+	NodeURLs              []string
+	StackJSONPath         string
+	DelinquentAction      string
+	Daemon                bool
+	LogEvents             bool
+	SenderURL             string
+	FFNamespace           string
+	APIPrefix             string
+	MaxTimePerAction      time.Duration
+	MaxActions            int64
+	StartRate             int64
+	EndRate               int64
+	RateRampUpTime        int64
+	SkipMintConfirmations bool
 }
 
 type PerformanceTestConfig struct {
@@ -45,17 +55,30 @@ type PerformanceTestConfig struct {
 	Instances     []InstanceConfig `json:"instances" yaml:"instances"`
 	WSConfig      FireFlyWsConfig  `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`
 	Daemon        bool             `json:"daemon,omitempty" yaml:"daemon,omitempty"`
+	Nodes         []NodeConfig     `yaml:"nodes" json:"nodes"`
+	LogEvents     bool             `json:"logEvents,omitempty" yaml:"logEvents,omitempty"`
 }
 
 type InstanceConfig struct {
-	Name            string           `yaml:"name" json:"name"`
-	Tests           []TestCaseConfig `yaml:"tests" json:"tests"`
-	Length          time.Duration    `yaml:"length" json:"length"`
-	MessageOptions  MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Sender          int              `json:"sender" yaml:"sender"`
-	Recipient       *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	TokenOptions    TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	Name                  string           `yaml:"name" json:"name"`
+	Tests                 []TestCaseConfig `yaml:"tests" json:"tests"`
+	Length                time.Duration    `yaml:"length" json:"length"`
+	MessageOptions        MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender                int              `json:"sender" yaml:"sender"`
+	ManualNodeIndex       int              `json:"manualNodeIndex" yaml:"manualNodeIndex"`
+	Recipient             *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	SigningAddress        string           `json:"signingAddress,omitempty" yaml:"signingAddress,omitempty"`
+	TokenOptions          TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions       ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	APIPrefix             string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
+	FFNamespace           string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
+	MaxTimePerAction      time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
+	MaxActions            int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
+	StartRate             int64            `json:"startRate,omitempty" yaml:"startRate,omitempty"`
+	EndRate               int64            `json:"endRate,omitempty" yaml:"endRate,omitempty"`
+	RateRampUpTime        int64            `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
+	SkipMintConfirmations bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
+	DelinquentAction      string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 }
 
 type TestCaseConfig struct {
@@ -63,12 +86,30 @@ type TestCaseConfig struct {
 	Workers int            `json:"workers" yaml:"workers"`
 }
 
+type NodeConfig struct {
+	Name         string `json:"name" yaml:"name"`
+	APIEndpoint  string `json:"apiEndpoint,omitempty" yaml:"apiEndpoint,omitempty"`
+	AuthUsername string `json:"authUsername,omitempty" yaml:"authUsername,omitempty"`
+	AuthPassword string `json:"authPassword,omitempty" yaml:"authPassword,omitempty"`
+}
+
 type MessageOptions struct {
 	LongMessage bool `json:"longMessage" yaml:"longMessage"`
 }
 
 type TokenOptions struct {
-	TokenType string `json:"tokenType" yaml:"tokenType"`
+	TokenType              string      `json:"tokenType" yaml:"tokenType"`
+	TokenPoolConnectorName string      `json:"poolConnectorName" yaml:"poolConnectorName"`
+	SupportsData           *bool       `json:"supportsData" yaml:"supportsData"` // Needs to be a pointer to allow defaulting to 'true'
+	SupportsURI            bool        `json:"supportsURI" yaml:"supportsURI"`
+	ExistingPoolName       string      `json:"existingPoolName" yaml:"existingPoolName"`
+	RecipientAddress       string      `json:"mintRecipient,omitempty" yaml:"mintRecipient,omitempty"`
+	Config                 TokenConfig `json:"config" yaml:"config"`
+}
+
+type TokenConfig struct {
+	PoolAddress     string `json:"address" yaml:"address"`
+	PoolBlockNumber string `json:"blockNumber" yaml:"blockNumber"`
 }
 
 type ContractOptions struct {
@@ -78,7 +119,6 @@ type ContractOptions struct {
 }
 
 type FireFlyWsConfig struct {
-	APIEndpoint            string        `mapstructure:"apiEndpoint" json:"apiEndpoint" yaml:"apiEndpoint"`
 	WSPath                 string        `mapstructure:"wsPath" json:"wsPath" yaml:"wsPath"`
 	ReadBufferSize         int           `mapstructure:"readBufferSize" json:"readBufferSize" yaml:"readBufferSize"`
 	WriteBufferSize        int           `mapstructure:"writeBufferSize" json:"writeBufferSize" yaml:"writeBufferSize"`
@@ -86,6 +126,9 @@ type FireFlyWsConfig struct {
 	MaximumDelay           time.Duration `mapstructure:"maximumDelay" json:"maximumDelay" yaml:"maximumDelay"`
 	InitialConnectAttempts int           `mapstructure:"initialConnectAttempts" json:"initialConnectAttempts" yaml:"initialConnectAttempts"`
 	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
+	AuthUsername           string        `mapstructure:"authUsername" json:"authUsername" yaml:"authUsername"`
+	AuthPassword           string        `mapstructure:"authPassword" json:"authPassword" yaml:"authPassword"`
+	DisableTLSVerification bool          `mapstructure:"disableTLSVerification" json:"disableTLSVerification" yaml:"disableTLSVerification"`
 }
 
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig {
@@ -100,6 +143,9 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig 
 		MaximumDelay:           conf.MaximumDelay,
 		InitialConnectAttempts: conf.InitialConnectAttempts,
 		HeartbeatInterval:      conf.HeartbeatInterval,
+		AuthUsername:           conf.AuthUsername,
+		AuthPassword:           conf.AuthPassword,
+		DisableTLSVerification: conf.DisableTLSVerification,
 	}
 }
 

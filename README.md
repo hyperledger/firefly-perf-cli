@@ -1,7 +1,7 @@
 # FireFly Performance CLI
 
 FireFly Performance CLI is a HTTP load testing tool that generates a constant request rate against a [FireFly](https://github.com/hyperledger/firefly)
-network and measure performance. This used to confirm confidence that [FireFly](https://github.com/hyperledger/firefly)
+network and measure performance. This is used to confirm confidence that [FireFly](https://github.com/hyperledger/firefly)
 can perform under normal conditions for an extended period of time.
 
 ## Items Subject to Testing
@@ -19,6 +19,17 @@ can perform under normal conditions for an extended period of time.
 The test configuration is structured around running `ffperf` as either a single process or in a distributed fashion as
 multiple processes.
 
+The tool has 2 basic modes of operation:
+
+1. Run against a local FireFly stack
+   - In this mode the `ffperf` tool loads information about the FireFly endpoint(s) to test by reading from a FireFly `stack.json` file on the local system. The location of the `stack.json` file is configured in the `instances.yaml` file by setting the `stackJSONPath` option.
+2. Run against a remote Firefly node
+   - In this mode the `ffperf` tool connects to a FireFly instance running on a different system. Since there won't be a FireFly `stack.json` on the system where `ffperf` is running the nodes to test must be configured in the `instances.yaml` file by settings the `Nodes` option.
+
+### Local FireFly stack
+
+See the [`Getting Started`](GettingStarted.md) guide for help running tests against a local stack.
+
 In the test configuration you define one or more test _instances_ for a single `ffperf` process to run. An instance then
 describes running one or more test _cases_ with a dedicated number of goroutine _workers_ against a _sender_ org and
 a _recipient_ org. The test configuration consumes a file reference to the stack JSON configuration produced by the
@@ -35,7 +46,30 @@ ffperf run -c /path/to/instances.yaml -i 0
 See [`example-instances.yaml`](config/example-instances.yaml) for examples of how to define multiple instances
 and multiple test cases per instance with all the various options.
 
-## Options
+### Remote FireFly node
+
+See the [`Getting Started with Remote Nodes`](GettingStartedRemoteNode.md) guide for help running tests against a remote FireFly node.
+
+In the test configuration you define one or more test _instances_ for a single `ffperf` process to run. An instance then
+describes running one or more test _cases_ with a dedicated number of goroutine _workers_. Instead of setting a _sender_ org and
+_recipient_ org (because there is no local FireFly `stack.json` to read) the instance must be configured to use a `Node` that has
+been defined in `instances.yaml`.
+
+Currently the types of test that can be run against a remote node are limited to those that only invoke a single endpoint. This makes
+it most suitable for test types `token_mint`, `custom_ethereum_contract` and `custom_fabric_contract` since these don't need
+responses to be received from other members of the FireFly network.
+
+As a result, running the CLI consists of providing an `instances.yaml` file describe the test configuration
+and an instance index or name indicating which instance the process should run:
+
+```shell
+ffperf run -c /path/to/instances.yaml -i 0
+```
+
+See [`example-remote-node-instances.yaml`](config/example-remote-node-instances.yaml) for examples of how to define nodes manually
+and configure test instances to use them.
+
+## Command line options
 
 ```
 Executes a instance within a performance test suite to generate synthetic load across multiple FireFly nodes within a network
@@ -52,6 +86,48 @@ Flags:
   -n, --instance-name string   Instance within performance config to run against the network
 )
 ```
+
+## Metrics
+
+The `ffperf` tool registers the following metrics for prometheus to consume:
+
+- ffperf_runner_received_events_total
+- ffperf_runner_incomplete_events_total
+- ffperf_runner_unexpected_events_total
+- ffperf_runner_sent_mints_total
+- ffperf_runner_sent_mint_errors_total
+- ffperf_runner_deliquent_msgs_total
+- ffperf_runner_perf_test_duration_seconds
+
+## Useful features
+
+The `ffperf` tool is designed to let you run various styles of test. The default behaviour for a local stack will exercise a local FireFly stack for 500 hours or until an error occurs. The `prep.sh` script will help you create and run this comprehensive test to validate a local installation of FireFly.
+
+There are various options for creating your own customized tests. A full list of configuration options can be seen at [`conf.go`](internal/conf/conf.go) but some useful options are outlined below:
+
+- Setting a maximum number of test actions
+  - See `maxActions` attribute (defaults to `0` i.e. unlimited).
+  - Once `maxActions` test actions (e.g. token mints) have taken place the test will shut down.
+- Ending the test when an error occurs
+  - See `delinquentAction` attribute (defaults to `exit`).
+  - A value of `exit` causes the test to end if an error occurs. Set to `log` to simply log the error and continue the test.
+- Set the maximum duration of the test
+  - See `length` attribute.
+  - Setting a test instance's `length` attribute to a time duration (e.g. `3h`) will cause the test to run for that long or until an error occurs (see `delinquentAction`).
+  - Note this setting is ignored if the test is run in daemon mode (running the `ffperf` command with `-d` or `--daemon`, or setting the global `daemon` value to `true` in the `instances.yaml` file). In daemon mode the test will run until `maxActions` has been reached or an error has occurred and `delinquentActions` is set to true.
+- Ramping up the rate of test actions (e.g. token mints)
+  - See the `startRate`, `endRate` and `rateRampUpTime` attribute of a test instance.
+  - All values default to `0` which has the effect of not limiting the rate of the test.
+  - The test will allow at most `startRate` actions to happen per second. Over the period of `rateRampUpTime` seconds the allowed rate will increase linearly until `endRate` actions per seconds are reached. At this point the test will continue at `endRate` actions per second until the test finishes.
+  - If `startRate` is the only value that is set, the test will run at that rate for the entire test.
+- Waiting for mint transactions to be confirmed before doing the next one
+  - See `skipMintConfirmations` (defaults to `false`).
+  - When set to `true` each worker routine will perform its action (e.g. minting a token) and wait for confirmation of that event before doing its next action.
+- Setting the features of a token being tested
+  - See `supportsData` and `supportsURI` attributes of a test instance.
+  - `supportsData` defaults to `true` since the sample token contract used by FireFly supports minting tokens with data. When set to `true` the message included in the mint transaction will include the ID of the worker routine and used to correlate received confirmation events.
+  - `supportsURI` defaults to `true` for nonfungible tokens. This attribute is ignored for fungible token tests. If set to `true` the ID of a worker routine will be set in the URI and used to correlate received confirmation events.
+  - If neither attribute is set to true any received confirmation events cannot be correlated with mint transactions. In this case the test behaves as if `skipMintConfirmations` is set to `true`.
 
 ## Distributed Deployment
 

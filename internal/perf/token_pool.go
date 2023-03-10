@@ -18,22 +18,35 @@ package perf
 
 import (
 	"errors"
+	"fmt"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
+	"github.com/hyperledger/firefly/pkg/core"
 	log "github.com/sirupsen/logrus"
 )
 
 func (pr *perfRunner) CreateTokenPool() error {
 	log.Infof("Creating Token Pool: %s", pr.poolName)
-	body := fftypes.TokenPool{
-		Connector: "erc20_erc721",
+	var config fftypes.JSONObject = make(map[string]interface{})
+
+	body := core.TokenPool{
+		Connector: pr.cfg.TokenOptions.TokenPoolConnectorName,
 		Name:      pr.poolName,
 		Type:      getTokenTypeEnum(pr.cfg.TokenOptions.TokenType),
+		Config:    config,
+	}
+
+	if pr.cfg.TokenOptions.Config.PoolAddress != "" {
+		config["address"] = pr.cfg.TokenOptions.Config.PoolAddress
+	}
+
+	if pr.cfg.TokenOptions.Config.PoolBlockNumber != "" {
+		config["blockNumber"] = pr.cfg.TokenOptions.Config.PoolBlockNumber
 	}
 
 	res, err := pr.client.R().
 		SetBody(&body).
-		Post("/api/v1/namespaces/default/tokens/pools?confirm=true")
+		Post(fmt.Sprintf("/%s/api/v1/namespaces/%s/tokens/pools?confirm=true", pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 
 	if err != nil || !res.IsSuccess() {
 		return errors.New("Failed to create token pool")
@@ -43,7 +56,7 @@ func (pr *perfRunner) CreateTokenPool() error {
 
 func getTokenTypeEnum(tokenType string) fftypes.FFEnum {
 	if tokenType == "nonfungible" {
-		return fftypes.TokenTypeNonFungible
+		return core.TokenTypeNonFungible
 	}
-	return fftypes.TokenTypeFungible
+	return core.TokenTypeFungible
 }

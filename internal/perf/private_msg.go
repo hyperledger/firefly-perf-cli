@@ -2,9 +2,11 @@ package perf
 
 import (
 	"fmt"
-	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/hyperledger/firefly/pkg/core"
+
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 type private struct {
@@ -49,7 +51,7 @@ func (tc *private) RunOnce() (string, error) {
 			"tag":"%s"
 		}
 	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.RecipientOrg, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
-	var resMessage fftypes.Message
+	var resMessage core.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
@@ -59,7 +61,7 @@ func (tc *private) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resMessage).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/messages/private", tc.pr.client.BaseURL))
+		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/messages/private", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error sending private message [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}

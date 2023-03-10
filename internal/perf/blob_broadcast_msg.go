@@ -2,10 +2,12 @@ package perf
 
 import (
 	"fmt"
-	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"math/big"
 
-	"github.com/hyperledger/firefly/pkg/fftypes"
+	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/hyperledger/firefly/pkg/core"
+
+	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 type blobBroadcast struct {
@@ -47,7 +49,7 @@ func (tc *blobBroadcast) RunOnce() (string, error) {
 		   "tag": "%s"
 		}
 	 }`, dataID, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
-	var resMessage fftypes.Message
+	var resMessage core.Message
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
@@ -57,7 +59,7 @@ func (tc *blobBroadcast) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resMessage).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/default/messages/broadcast", tc.pr.client.BaseURL))
+		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/messages/broadcast", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error sending broadcast message with blob attachment [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
