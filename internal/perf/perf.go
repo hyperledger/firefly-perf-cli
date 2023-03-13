@@ -592,6 +592,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 		select {
 		case <-pr.bfr:
 			var confirmations int
+			limiter.SetLimit(rate.Limit(pr.getCurrentRate()))
 
 			// Worker sends its task
 			hist, histErr := perfTestDurationHistogram.GetMetricWith(prometheus.Labels{
@@ -609,7 +610,12 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			trackingID, err := tc.RunOnce()
 
 			if err != nil {
-				return err
+				if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					return err
+				} else {
+					log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, histErr)
+					continue
+				}
 			} else {
 				totalActionsCounter.Inc()
 			}
@@ -643,7 +649,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				hist.Observe(time.Since(startTime).Seconds())
 			}
 			loop++
-			limiter.SetLimit(rate.Limit(pr.getCurrentRate()))
 		case <-pr.ctx.Done():
 			return nil
 		}
