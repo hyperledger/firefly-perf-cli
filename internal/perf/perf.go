@@ -613,7 +613,8 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 					return err
 				} else {
-					log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, histErr)
+					log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, err)
+					err = nil
 					continue
 				}
 			} else {
