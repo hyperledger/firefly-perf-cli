@@ -67,6 +67,12 @@ var sentMintErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
+var mintBalanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+	Namespace: METRICS_NAMESPACE,
+	Name:      "mint_token_balance",
+	Subsystem: METRICS_SUBSYSTEM,
+})
+
 var receivedEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "received_events_total",
@@ -102,6 +108,7 @@ func init() {
 	prometheus.Register(deliquentMsgsCounter)
 	prometheus.Register(sentMintsCounter)
 	prometheus.Register(sentMintErrorCounter)
+	prometheus.Register(mintBalanceGauge)
 	prometheus.Register(receivedEventsCounter)
 	prometheus.Register(incompleteEventsCounter)
 	prometheus.Register(unexpectedEventsCounter)
@@ -117,7 +124,12 @@ func getMetricVal(collector prometheus.Collector) float64 {
 	if err != nil {
 		log.Error("Error writing metric: %s", err)
 	}
-	return *metric.Counter.Value
+	if metric.Counter != nil {
+		return *metric.Counter.Value
+	} else if metric.Gauge != nil {
+		return *metric.Gauge.Value
+	}
+	return 0
 }
 
 type PerfRunner interface {
@@ -144,6 +156,8 @@ type inflightTest struct {
 	time     time.Time
 	testCase TestCase
 }
+
+var mintStartingBalance int
 
 type perfRunner struct {
 	bfr               chan int
@@ -259,6 +273,14 @@ func (pr *perfRunner) Start() (err error) {
 				NodeURL: nodeURL,
 				Name:    subName,
 				Job:     conf.PerfTestTokenMint,
+			}
+
+			if pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
+				mintStartingBalance, err = pr.GetMintRecipientBalance()
+
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -408,18 +430,44 @@ perfLoop:
 		}
 	}
 
+	// A minting test configured to check the balance of the mint recipient address
+	// Since this could take some time after all mint requests have been submitted we allow until
+	// the end of the test duration for the balance to reach the expected value.
+	if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) && pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
+		balanceEndTime := time.Now().Unix() + int64(pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds())
+		var currentBalance int
+		fmt.Printf("Waiting for up to %v for the balance of %s to reach the expected value\n", pr.cfg.TokenOptions.MaxTokenBalanceWait, pr.cfg.RecipientAddress)
+	balanceCheckLoop:
+		for time.Now().Unix() < balanceEndTime {
+
+			timeout := time.After(10 * time.Second)
+			select {
+			case <-pr.ctx.Done():
+				return nil
+			case <-timeout:
+				currentBalance, err = pr.GetMintRecipientBalance()
+				mintBalanceGauge.Set(float64(currentBalance) - float64(mintStartingBalance))
+
+				if err != nil {
+					log.Errorf("Failed to query token balance: %v\n", err)
+				} else {
+					if getMetricVal(sentMintsCounter) == getMetricVal(mintBalanceGauge) {
+						log.Infof("Balance reached\n")
+						break balanceCheckLoop
+					}
+				}
+			}
+		}
+
+		if getMetricVal(sentMintsCounter) != getMetricVal(mintBalanceGauge) {
+			log.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time\n")
+			if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+				log.Panic(fmt.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time"))
+			}
+		}
+	}
+
 	pr.shutdown()
-	log.Info("Shutdown summary:")
-	log.Infof(" - Prometheus metric sent_mints_total=%f\n", getMetricVal(sentMintsCounter))
-	log.Infof(" - Prometheus metric sent_mint_errors_total=%f\n", getMetricVal(sentMintErrorCounter))
-	log.Infof(" - Prometheus metric received_events_total=%f\n", getMetricVal(receivedEventsCounter))
-	log.Infof(" - Prometheus metric unexpected_events_total=%f\n", getMetricVal(unexpectedEventsCounter))
-	log.Infof(" - Prometheus metric incomplete_events_total=%f\n", getMetricVal(incompleteEventsCounter))
-	log.Infof(" - Prometheus metric deliquent_msgs_total=%f\n", getMetricVal(deliquentMsgsCounter))
-	log.Infof(" - Prometheus metric actions_total=%f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %d", time.Now().Unix()-pr.startTime)
-	log.Infof(" - Total actions: %d", pr.totalSummary)
-	log.Infof(" - Actions/sec: %2f", float64(pr.totalSummary)/float64(time.Now().Unix()-pr.startTime))
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
@@ -428,6 +476,19 @@ perfLoop:
 	time.Sleep(10 * time.Second)
 	pr.detectDeliquentMsgs()
 	time.Sleep(20 * time.Second)
+
+	log.Info("Shutdown summary:")
+	log.Infof(" - Prometheus metric sent_mints_total        = %f\n", getMetricVal(sentMintsCounter))
+	log.Infof(" - Prometheus metric sent_mint_errors_total  = %f\n", getMetricVal(sentMintErrorCounter))
+	log.Infof(" - Prometheus metric mint_token_balance      = %f\n", getMetricVal(mintBalanceGauge))
+	log.Infof(" - Prometheus metric received_events_total   = %f\n", getMetricVal(receivedEventsCounter))
+	log.Infof(" - Prometheus metric unexpected_events_total = %f\n", getMetricVal(unexpectedEventsCounter))
+	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
+	log.Infof(" - Prometheus metric deliquent_msgs_total    = %f\n", getMetricVal(deliquentMsgsCounter))
+	log.Infof(" - Prometheus metric actions_total           = %f\n", getMetricVal(totalActionsCounter))
+	log.Infof(" - Test duration (secs): %d", time.Now().Unix()-pr.startTime)
+	log.Infof(" - Total actions: %d", pr.totalSummary)
+	log.Infof(" - Actions/sec: %2f", float64(pr.totalSummary)/float64(time.Now().Unix()-pr.startTime))
 
 	return nil
 }
@@ -565,14 +626,14 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 
 // Calculate what the current rate limit is
 func (pr *perfRunner) getCurrentRate() int64 {
-	if pr.cfg.RateRampUpTime == 0 {
+	if pr.cfg.RateRampUpTime.Seconds() == 0 {
 		return pr.cfg.StartRate
 	}
 
 	timeSinceStart := time.Since(time.Unix(pr.startTime, 0))
 
 	// % of way through ramp up time
-	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime) * 100
+	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime.Seconds()) * 100
 
 	// Rate to use now
 	rateNow := math.Min(float64(pr.cfg.StartRate)+(float64((pr.cfg.EndRate-pr.cfg.StartRate))/float64(100)*perc), float64(pr.cfg.EndRate))
@@ -650,6 +711,19 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				hist.Observe(time.Since(startTime).Seconds())
 			}
 			loop++
+
+			if testName == conf.PerfTestTokenMint.String() &&
+				pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 &&
+				workerID == 0 && (loop%2 == 0) {
+				log.Infof("Worker 0 updating current mint balance")
+				// Worker 0 periodically updates the mint balance gauge
+				currentBalance, err := pr.GetMintRecipientBalance()
+				if err != nil {
+					log.Warnf("Failed to check token balance: ", err)
+				} else {
+					mintBalanceGauge.Set(float64(currentBalance) - float64(mintStartingBalance))
+				}
+			}
 		case <-pr.ctx.Done():
 			return nil
 		}
@@ -788,6 +862,12 @@ func (pr *perfRunner) detectDeliquentMsgs() bool {
 	}
 
 	return len(delinquentMsgs) > 0
+}
+
+func (pr *perfRunner) detectDeliquentBalance(expectedBalance int) bool {
+	mintRecipientBalance := 0
+
+	return mintRecipientBalance < expectedBalance
 }
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
@@ -969,6 +1049,36 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 	log.Infof("Created minted tokens subscription on %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
 
 	return sub.ID.String(), sub.Name, nil
+}
+
+type PaginatedResponse struct {
+	Total int `ffstruct:"PaginatedResponse" json:"total,omitempty"`
+}
+
+func (pr *perfRunner) GetMintRecipientBalance() (int, error) {
+	var payload string
+
+	var response PaginatedResponse
+	var resError fftypes.RESTError
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetQueryParams(map[string]string{
+			"count": "true",
+			"limit": "1",
+			"key":   pr.cfg.TokenOptions.RecipientAddress,
+		}).
+		SetBody([]byte(payload)).
+		SetResult(&response).
+		SetError(&resError).
+		Get(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/tokens/balances", pr.client.BaseURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+	if err != nil || res.IsError() {
+		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
+	}
+
+	return response.Total, nil
 }
 
 func (pr *perfRunner) IsDaemon() bool {
