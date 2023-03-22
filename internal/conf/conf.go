@@ -25,29 +25,30 @@ import (
 )
 
 type RunnerConfig struct {
-	Tests                 []TestCaseConfig
-	Length                time.Duration
-	MessageOptions        MessageOptions
-	RecipientOrg          string
-	RecipientAddress      string
-	SigningAddress        string
-	TokenOptions          TokenOptions
-	ContractOptions       ContractOptions
-	WebSocket             FireFlyWsConfig
-	NodeURLs              []string
-	StackJSONPath         string
-	DelinquentAction      string
-	Daemon                bool
-	LogEvents             bool
-	SenderURL             string
-	FFNamespace           string
-	APIPrefix             string
-	MaxTimePerAction      time.Duration
-	MaxActions            int64
-	StartRate             int64
-	EndRate               int64
-	RateRampUpTime        int64
-	SkipMintConfirmations bool
+	Tests                     []TestCaseConfig
+	Length                    time.Duration
+	MessageOptions            MessageOptions
+	RecipientOrg              string
+	RecipientAddress          string
+	SigningKey                string
+	PerWorkerSigningKeyPrefix string
+	TokenOptions              TokenOptions
+	ContractOptions           ContractOptions
+	WebSocket                 FireFlyWsConfig
+	NodeURLs                  []string
+	StackJSONPath             string
+	DelinquentAction          string
+	Daemon                    bool
+	LogEvents                 bool
+	SenderURL                 string
+	FFNamespace               string
+	APIPrefix                 string
+	MaxTimePerAction          time.Duration
+	MaxActions                int64
+	StartRate                 int64
+	EndRate                   int64
+	RateRampUpTime            int64
+	SkipMintConfirmations     bool
 }
 
 type PerformanceTestConfig struct {
@@ -60,25 +61,26 @@ type PerformanceTestConfig struct {
 }
 
 type InstanceConfig struct {
-	Name                  string           `yaml:"name" json:"name"`
-	Tests                 []TestCaseConfig `yaml:"tests" json:"tests"`
-	Length                time.Duration    `yaml:"length" json:"length"`
-	MessageOptions        MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	Sender                int              `json:"sender" yaml:"sender"`
-	ManualNodeIndex       int              `json:"manualNodeIndex" yaml:"manualNodeIndex"`
-	Recipient             *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	SigningAddress        string           `json:"signingAddress,omitempty" yaml:"signingAddress,omitempty"`
-	TokenOptions          TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions       ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	APIPrefix             string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
-	FFNamespace           string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
-	MaxTimePerAction      time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
-	MaxActions            int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
-	StartRate             int64            `json:"startRate,omitempty" yaml:"startRate,omitempty"`
-	EndRate               int64            `json:"endRate,omitempty" yaml:"endRate,omitempty"`
-	RateRampUpTime        int64            `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
-	SkipMintConfirmations bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
-	DelinquentAction      string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
+	Name                      string           `yaml:"name" json:"name"`
+	Tests                     []TestCaseConfig `yaml:"tests" json:"tests"`
+	Length                    time.Duration    `yaml:"length" json:"length"`
+	MessageOptions            MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	Sender                    int              `json:"sender" yaml:"sender"`
+	ManualNodeIndex           int              `json:"manualNodeIndex" yaml:"manualNodeIndex"`
+	Recipient                 *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	SigningKey                string           `json:"signingKey,omitempty" yaml:"signingKey,omitempty"`
+	TokenOptions              TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions           ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	APIPrefix                 string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
+	FFNamespace               string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
+	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
+	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
+	StartRate                 int64            `json:"startRate,omitempty" yaml:"startRate,omitempty"`
+	EndRate                   int64            `json:"endRate,omitempty" yaml:"endRate,omitempty"`
+	RateRampUpTime            int64            `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
+	SkipMintConfirmations     bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
+	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
+	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 }
 
 type TestCaseConfig struct {

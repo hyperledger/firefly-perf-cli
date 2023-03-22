@@ -148,15 +148,6 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 
 	if len(perfConfig.Nodes) > 0 {
 		// Use node configuration defined in the ffperf config file
-		if (instance.ManualNodeIndex + 1) > len(perfConfig.Nodes) {
-			log.Errorf("NodeIndex %d not valid - only %d nodes have been configured\n", instanceIndex, len(perfConfig.Nodes))
-			return nil, errors.Errorf("Invalid manual node configuration")
-		}
-
-		if perfConfig.StackJSONPath != "" {
-			log.Error("FireFly performance CLI cannot be configured with manual nodes and a local FireFly stack")
-			return nil, errors.Errorf("Invalid manual node configuration")
-		}
 
 		// Use manual endpoint configuration instead of getting it from a FireFly stack
 		log.Infof("Running test against manual endpoint \"%s\"\n", perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
@@ -166,7 +157,8 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		runnerConfig.NodeURLs = append(runnerConfig.NodeURLs, perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
 		runnerConfig.SenderURL = runnerConfig.NodeURLs[0]
 		runnerConfig.RecipientAddress = instance.TokenOptions.RecipientAddress
-		runnerConfig.SigningAddress = instance.SigningAddress
+		runnerConfig.SigningKey = instance.SigningKey
+		runnerConfig.PerWorkerSigningKeyPrefix = instance.PerWorkerSigningKeyPrefix
 
 		if perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername != "" {
 			runnerConfig.WebSocket.AuthUsername = perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername
@@ -231,7 +223,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 
 	setDefaults(runnerConfig)
 
-	err := validateConfig(*runnerConfig)
+	err := validateConfig(runnerConfig, instance, perfConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -256,9 +248,18 @@ func setDefaults(runnerConfig *conf.RunnerConfig) {
 	}
 }
 
-func validateConfig(cfg conf.RunnerConfig) error {
+func validateConfig(cfg *conf.RunnerConfig, instance *conf.InstanceConfig, globalConfig *conf.PerformanceTestConfig) error {
 	if cfg.TokenOptions.TokenType != "" && cfg.TokenOptions.TokenType != core.TokenTypeFungible.String() && cfg.TokenOptions.TokenType != core.TokenTypeNonFungible.String() {
 		return fmt.Errorf("invalid token type. Choose from [%s %s]", core.TokenTypeFungible.String(), core.TokenTypeNonFungible.String())
+	}
+	if cfg.SigningKey != "" && cfg.PerWorkerSigningKeyPrefix != "" {
+		return fmt.Errorf("must only specify one of 'signingKey' and 'perWorkerSigningKeyPrefix'")
+	}
+	if len(globalConfig.Nodes) > 0 && globalConfig.StackJSONPath != "" {
+		return fmt.Errorf("FireFly performance CLI cannot be configured with manual nodes and a local FireFly stack")
+	}
+	if (instance.ManualNodeIndex + 1) > len(globalConfig.Nodes) {
+		return fmt.Errorf("NodeIndex %d not valid - only %d nodes have been configured", instanceIndex, len(globalConfig.Nodes))
 	}
 	return nil
 }

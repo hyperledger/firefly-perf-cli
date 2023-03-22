@@ -46,6 +46,18 @@ func (tc *tokenMint) IDType() TrackingIDType {
 	return TrackingIDTypeTransferID
 }
 
+func (tc *tokenMint) GetSigningKey() string {
+	if tc.pr.cfg.SigningKey != "" {
+		// Use the hard-coded signing key
+		return tc.pr.cfg.SigningKey
+	}
+	if tc.pr.cfg.PerWorkerSigningKeyPrefix != "" {
+		// Use the per-worker signing key prefix with our worker ID appended
+		return fmt.Sprintf("%s%d", tc.pr.cfg.PerWorkerSigningKeyPrefix, tc.testBase.workerID)
+	}
+	return ""
+}
+
 func (tc *tokenMint) RunOnce() (string, error) {
 	var payload string
 	mintAmount := 10
@@ -57,7 +69,7 @@ func (tc *tokenMint) RunOnce() (string, error) {
 		"pool": "%s",
 		"amount": "%d",
 		"to": "%s",
-		"key": "%s"`, tc.pr.poolName, mintAmount, tc.pr.cfg.RecipientAddress, tc.pr.cfg.SigningAddress)
+		"key": "%s"`, tc.pr.poolName, mintAmount, tc.pr.cfg.RecipientAddress, tc.GetSigningKey())
 
 	message := ""
 	uri := ""
