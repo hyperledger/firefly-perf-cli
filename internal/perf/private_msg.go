@@ -13,11 +13,12 @@ type private struct {
 	testBase
 }
 
-func newPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
+func newPrivateTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &private{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

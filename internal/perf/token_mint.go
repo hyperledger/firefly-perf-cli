@@ -29,11 +29,12 @@ type tokenMint struct {
 	testBase
 }
 
-func newTokenMintTestWorker(pr *perfRunner, workerID int) TestCase {
+func newTokenMintTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &tokenMint{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

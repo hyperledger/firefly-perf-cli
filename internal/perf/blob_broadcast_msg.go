@@ -14,11 +14,12 @@ type blobBroadcast struct {
 	testBase
 }
 
-func newBlobBroadcastTestWorker(pr *perfRunner, workerID int) TestCase {
+func newBlobBroadcastTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &blobBroadcast{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }
