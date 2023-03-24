@@ -705,10 +705,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
 
-			// for _, trackingID := range trackingIDs {
-			// 	pr.markTestComplete(trackingID)
-			// }
-
 			if histErr == nil {
 				hist.Observe(time.Since(startTime).Seconds())
 			}
