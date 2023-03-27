@@ -29,11 +29,12 @@ type customFabric struct {
 	testBase
 }
 
-func newCustomFabricTestWorker(pr *perfRunner, workerID int) TestCase {
+func newCustomFabricTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &customFabric{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

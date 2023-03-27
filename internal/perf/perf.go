@@ -67,6 +67,12 @@ var sentMintErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
+var mintBalanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+	Namespace: METRICS_NAMESPACE,
+	Name:      "mint_token_balance",
+	Subsystem: METRICS_SUBSYSTEM,
+})
+
 var receivedEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "received_events_total",
@@ -102,6 +108,7 @@ func init() {
 	prometheus.Register(deliquentMsgsCounter)
 	prometheus.Register(sentMintsCounter)
 	prometheus.Register(sentMintErrorCounter)
+	prometheus.Register(mintBalanceGauge)
 	prometheus.Register(receivedEventsCounter)
 	prometheus.Register(incompleteEventsCounter)
 	prometheus.Register(unexpectedEventsCounter)
@@ -117,7 +124,12 @@ func getMetricVal(collector prometheus.Collector) float64 {
 	if err != nil {
 		log.Error("Error writing metric: %s", err)
 	}
-	return *metric.Counter.Value
+	if metric.Counter != nil {
+		return *metric.Counter.Value
+	} else if metric.Gauge != nil {
+		return *metric.Gauge.Value
+	}
+	return 0
 }
 
 type PerfRunner interface {
@@ -138,12 +150,15 @@ type TestCase interface {
 	RunOnce() (trackingID string, err error)
 	IDType() TrackingIDType
 	Name() string
+	ActionsPerLoop() int
 }
 
 type inflightTest struct {
 	time     time.Time
 	testCase TestCase
 }
+
+var mintStartingBalance int
 
 type perfRunner struct {
 	bfr               chan int
@@ -260,6 +275,14 @@ func (pr *perfRunner) Start() (err error) {
 				Name:    subName,
 				Job:     conf.PerfTestTokenMint,
 			}
+
+			if pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
+				mintStartingBalance, err = pr.getMintRecipientBalance()
+
+				if err != nil {
+					return err
+				}
+			}
 		}
 
 		// Create contract sub and listener, if needed
@@ -341,19 +364,19 @@ func (pr *perfRunner) Start() (err error) {
 
 			switch test.Name {
 			case conf.PerfTestBroadcast:
-				tc = newBroadcastTestWorker(pr, id)
+				tc = newBroadcastTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestPrivateMsg:
-				tc = newPrivateTestWorker(pr, id)
+				tc = newPrivateTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestTokenMint:
-				tc = newTokenMintTestWorker(pr, id)
+				tc = newTokenMintTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomEthereumContract:
-				tc = newCustomEthereumTestWorker(pr, id)
+				tc = newCustomEthereumTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomFabricContract:
-				tc = newCustomFabricTestWorker(pr, id)
+				tc = newCustomFabricTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestBlobBroadcast:
-				tc = newBlobBroadcastTestWorker(pr, id)
+				tc = newBlobBroadcastTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestBlobPrivateMsg:
-				tc = newBlobPrivateTestWorker(pr, id)
+				tc = newBlobPrivateTestWorker(pr, id, test.ActionsPerLoop)
 			default:
 				return fmt.Errorf("Unknown test case '%s'", test.Name)
 			}
@@ -408,26 +431,36 @@ perfLoop:
 		}
 	}
 
+	// If configured, check that the balance of the mint recipient address is correct
+	if pr.detectDeliquentBalance() {
+		if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+			log.Panic(fmt.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time"))
+		}
+	}
+
 	pr.shutdown()
-	log.Info("Shutdown summary:")
-	log.Infof(" - Prometheus metric sent_mints_total=%f\n", getMetricVal(sentMintsCounter))
-	log.Infof(" - Prometheus metric sent_mint_errors_total=%f\n", getMetricVal(sentMintErrorCounter))
-	log.Infof(" - Prometheus metric received_events_total=%f\n", getMetricVal(receivedEventsCounter))
-	log.Infof(" - Prometheus metric unexpected_events_total=%f\n", getMetricVal(unexpectedEventsCounter))
-	log.Infof(" - Prometheus metric incomplete_events_total=%f\n", getMetricVal(incompleteEventsCounter))
-	log.Infof(" - Prometheus metric deliquent_msgs_total=%f\n", getMetricVal(deliquentMsgsCounter))
-	log.Infof(" - Prometheus metric actions_total=%f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %d", time.Now().Unix()-pr.startTime)
-	log.Infof(" - Total actions: %d", pr.totalSummary)
-	log.Infof(" - Actions/sec: %2f", float64(pr.totalSummary)/float64(time.Now().Unix()-pr.startTime))
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
 	// one last time so metrics are up-to-date
+	endTime := time.Now().Unix()
 	log.Warn("Runner stopping in 30s")
 	time.Sleep(10 * time.Second)
 	pr.detectDeliquentMsgs()
 	time.Sleep(20 * time.Second)
+
+	log.Info("Shutdown summary:")
+	log.Infof(" - Prometheus metric sent_mints_total        = %f\n", getMetricVal(sentMintsCounter))
+	log.Infof(" - Prometheus metric sent_mint_errors_total  = %f\n", getMetricVal(sentMintErrorCounter))
+	log.Infof(" - Prometheus metric mint_token_balance      = %f\n", getMetricVal(mintBalanceGauge))
+	log.Infof(" - Prometheus metric received_events_total   = %f\n", getMetricVal(receivedEventsCounter))
+	log.Infof(" - Prometheus metric unexpected_events_total = %f\n", getMetricVal(unexpectedEventsCounter))
+	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
+	log.Infof(" - Prometheus metric deliquent_msgs_total    = %f\n", getMetricVal(deliquentMsgsCounter))
+	log.Infof(" - Prometheus metric actions_total           = %f\n", getMetricVal(totalActionsCounter))
+	log.Infof(" - Test duration (secs): %d", endTime-pr.startTime)
+	log.Infof(" - Total actions: %d", pr.totalSummary)
+	log.Infof(" - Actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
 
 	return nil
 }
@@ -565,19 +598,26 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 
 // Calculate what the current rate limit is
 func (pr *perfRunner) getCurrentRate() int64 {
-	if pr.cfg.RateRampUpTime == 0 {
+	if pr.cfg.RateRampUpTime.Seconds() == 0 {
 		return pr.cfg.StartRate
 	}
 
 	timeSinceStart := time.Since(time.Unix(pr.startTime, 0))
 
 	// % of way through ramp up time
-	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime) * 100
+	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime.Seconds()) * 100
 
 	// Rate to use now
 	rateNow := math.Min(float64(pr.cfg.StartRate)+(float64((pr.cfg.EndRate-pr.cfg.StartRate))/float64(100)*perc), float64(pr.cfg.EndRate))
 
 	return int64(rateNow)
+}
+
+func (pr *perfRunner) allActionsComplete() bool {
+	if pr.cfg.MaxActions > 0 && int64(getMetricVal(totalActionsCounter)) >= pr.cfg.MaxActions {
+		return true
+	}
+	return false
 }
 
 func (pr *perfRunner) runLoop(tc TestCase) error {
@@ -591,7 +631,8 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	for {
 		select {
 		case <-pr.bfr:
-			var confirmations int
+			var confirmationsPerAction int
+			var actionsCompleted int
 			limiter.SetLimit(rate.Limit(pr.getCurrentRate()))
 
 			// Worker sends its task
@@ -603,53 +644,84 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				log.Errorf("Error retreiving histogram: %s", histErr)
 			}
 
-			// Wait until the rate limiter allows us to proceed
-			limiter.Wait(pr.ctx)
-
 			startTime := time.Now()
-			trackingID, err := tc.RunOnce()
+			trackingIDs := make([]string, 0)
 
-			if err != nil {
-				if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-					return err
-				} else {
-					log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, err)
-					err = nil
-					continue
+			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
+				// Wait until the rate limiter allows us to proceed
+				limiter.Wait(pr.ctx)
+
+				if pr.allActionsComplete() {
+					break
 				}
-			} else {
-				totalActionsCounter.Inc()
-			}
 
-			pr.markTestInFlight(tc, trackingID)
-			log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
+				trackingID, err := tc.RunOnce()
+
+				if err != nil {
+					if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+						return err
+					} else {
+						log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, err)
+						err = nil
+						continue
+					}
+				} else {
+					trackingIDs = append(trackingIDs, trackingID)
+					totalActionsCounter.Inc()
+				}
+
+				pr.markTestInFlight(tc, trackingID)
+				log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
+			}
 
 			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
 				// For minting tests a worker can (if configured) skip waiting for a matching response event
 				// before making itself available for the next job
-				confirmations = 0
+				confirmationsPerAction = 0
 			} else {
-				confirmations = len(pr.nodeURLs)
+				confirmationsPerAction += len(pr.nodeURLs)
 				if testName == conf.PerfTestBlobPrivateMsg.String() || testName == conf.PerfTestPrivateMsg.String() {
-					confirmations = 2
+					confirmationsPerAction += 2
 				}
 			}
 
 			// Wait for worker to confirm the message before proceeding to next task
-			for i := 0; i < confirmations; i++ {
-				select {
-				case <-pr.ctx.Done():
-					return nil
-				case <-pr.wsReceivers[workerID]:
-					break
+
+			for j := 0; j < actionsCompleted; j++ {
+				var nextTrackingID string
+				for i := 0; i < confirmationsPerAction; i++ {
+					select {
+					case <-pr.ctx.Done():
+						return nil
+					case <-pr.wsReceivers[workerID]:
+						break
+					}
 				}
+				nextTrackingID = trackingIDs[0]
+				if len(trackingIDs) > 0 {
+					trackingIDs = trackingIDs[1:]
+				}
+				pr.markTestComplete(nextTrackingID)
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
-			pr.markTestComplete(trackingID)
+
 			if histErr == nil {
 				hist.Observe(time.Since(startTime).Seconds())
 			}
 			loop++
+
+			if testName == conf.PerfTestTokenMint.String() &&
+				pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 &&
+				workerID == 0 && (loop%10 == 0) {
+				log.Infof("Worker 0 updating current mint balance")
+				// Worker 0 periodically updates the mint balance gauge
+				currentBalance, err := pr.getMintRecipientBalance()
+				if err != nil {
+					log.Warnf("Failed to check token balance: ", err)
+				} else {
+					mintBalanceGauge.Set(float64(currentBalance) - float64(mintStartingBalance))
+				}
+			}
 		case <-pr.ctx.Done():
 			return nil
 		}
@@ -788,6 +860,49 @@ func (pr *perfRunner) detectDeliquentMsgs() bool {
 	}
 
 	return len(delinquentMsgs) > 0
+}
+
+// A minting test configured to check the balance of the mint recipient address
+// Since this could take some time after all mint requests have been submitted we allow until
+// the end of the test duration for the balance to reach the expected value.
+// Function returns true if the expected balance isn't correct, otherwise false
+func (pr *perfRunner) detectDeliquentBalance() bool {
+
+	if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) && pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
+		balanceEndTime := time.Now().Unix() + int64(pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds())
+		// var currentBalance int
+		fmt.Printf("Waiting for up to %v for the balance of %s to reach the expected value\n", pr.cfg.TokenOptions.MaxTokenBalanceWait, pr.cfg.RecipientAddress)
+	balanceCheckLoop:
+		for time.Now().Unix() < balanceEndTime {
+
+			timeout := time.After(10 * time.Second)
+			select {
+			case <-pr.ctx.Done():
+				return true
+			case <-timeout:
+				currentBalance, err := pr.getMintRecipientBalance()
+				mintBalanceGauge.Set(float64(currentBalance) - float64(mintStartingBalance))
+
+				if err != nil {
+					log.Errorf("Failed to query token balance: %v\n", err)
+				} else {
+					if getMetricVal(sentMintsCounter) == getMetricVal(mintBalanceGauge) {
+						log.Infof("Balance reached\n")
+						break balanceCheckLoop
+					}
+				}
+			}
+		}
+
+		if getMetricVal(sentMintsCounter) != getMetricVal(mintBalanceGauge) {
+			log.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time\n")
+			return true
+		} else {
+			return false
+		}
+	} else {
+		return false
+	}
 }
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
@@ -969,6 +1084,36 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 	log.Infof("Created minted tokens subscription on %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
 
 	return sub.ID.String(), sub.Name, nil
+}
+
+type PaginatedResponse struct {
+	Total int `ffstruct:"PaginatedResponse" json:"total,omitempty"`
+}
+
+func (pr *perfRunner) getMintRecipientBalance() (int, error) {
+	var payload string
+
+	var response PaginatedResponse
+	var resError fftypes.RESTError
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetQueryParams(map[string]string{
+			"count": "true",
+			"limit": "1",
+			"key":   pr.cfg.TokenOptions.RecipientAddress,
+		}).
+		SetBody([]byte(payload)).
+		SetResult(&response).
+		SetError(&resError).
+		Get(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/tokens/balances", pr.client.BaseURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+	if err != nil || res.IsError() {
+		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
+	}
+
+	return response.Total, nil
 }
 
 func (pr *perfRunner) IsDaemon() bool {

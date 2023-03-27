@@ -14,11 +14,12 @@ type blobPrivate struct {
 	testBase
 }
 
-func newBlobPrivateTestWorker(pr *perfRunner, workerID int) TestCase {
+func newBlobPrivateTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &blobPrivate{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

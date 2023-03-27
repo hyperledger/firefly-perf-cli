@@ -13,11 +13,12 @@ type broadcast struct {
 	testBase
 }
 
-func newBroadcastTestWorker(pr *perfRunner, workerID int) TestCase {
+func newBroadcastTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &broadcast{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

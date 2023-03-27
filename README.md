@@ -96,6 +96,7 @@ The `ffperf` tool registers the following metrics for prometheus to consume:
 - ffperf_runner_unexpected_events_total
 - ffperf_runner_sent_mints_total
 - ffperf_runner_sent_mint_errors_total
+- ffperf_running_mint_token_balance (gauge)
 - ffperf_runner_deliquent_msgs_total
 - ffperf_runner_perf_test_duration_seconds
 
@@ -128,6 +129,8 @@ There are various options for creating your own customized tests. A full list of
   - `supportsData` defaults to `true` since the sample token contract used by FireFly supports minting tokens with data. When set to `true` the message included in the mint transaction will include the ID of the worker routine and used to correlate received confirmation events.
   - `supportsURI` defaults to `true` for nonfungible tokens. This attribute is ignored for fungible token tests. If set to `true` the ID of a worker routine will be set in the URI and used to correlate received confirmation events.
   - If neither attribute is set to true any received confirmation events cannot be correlated with mint transactions. In this case the test behaves as if `skipMintConfirmations` is set to `true`.
+- Waiting at the end of the test for the minted token balance of the `mintRecipient` address to equal the expected value. Since a test might be run several times with the same address the test gets the balance at the beginning of the test, and then again at the end. The difference is expected to equal the value of `maxActions`. To enable this check set the `maxTokenBalanceWait` token option the length of time to wait for the balance to be reached. If `maxTokenBalanceWait` is not set the test will not check balances.
+- Having a worker loop submit more than 1 action per loop by setting `actionsPerLoop` for the test. This can be helpful when you want to scale the number of actions done in parallel without having to scale the number of workers. The default value is `1` for this attribute. If setting to a value > `1` it is recommended to have `skipMintConfirmations` to set `false`.
 
 ## Distributed Deployment
 

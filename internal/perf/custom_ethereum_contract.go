@@ -29,11 +29,12 @@ type customEthereum struct {
 	testBase
 }
 
-func newCustomEthereumTestWorker(pr *perfRunner, workerID int) TestCase {
+func newCustomEthereumTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
 	return &customEthereum{
 		testBase: testBase{
-			pr:       pr,
-			workerID: workerID,
+			pr:             pr,
+			workerID:       workerID,
+			actionsPerLoop: actionsPerLoop,
 		},
 	}
 }

@@ -246,6 +246,12 @@ func setDefaults(runnerConfig *conf.RunnerConfig) {
 	} else if runnerConfig.EndRate == 0 {
 		runnerConfig.EndRate = runnerConfig.StartRate
 	}
+
+	for i, _ := range runnerConfig.Tests {
+		if runnerConfig.Tests[i].ActionsPerLoop <= 0 {
+			runnerConfig.Tests[i].ActionsPerLoop = 1
+		}
+	}
 }
 
 func validateConfig(cfg *conf.RunnerConfig, instance *conf.InstanceConfig, globalConfig *conf.PerformanceTestConfig) error {

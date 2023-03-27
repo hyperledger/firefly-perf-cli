@@ -47,7 +47,7 @@ type RunnerConfig struct {
 	MaxActions                int64
 	StartRate                 int64
 	EndRate                   int64
-	RateRampUpTime            int64
+	RateRampUpTime            time.Duration
 	SkipMintConfirmations     bool
 }
 
@@ -77,15 +77,16 @@ type InstanceConfig struct {
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
 	StartRate                 int64            `json:"startRate,omitempty" yaml:"startRate,omitempty"`
 	EndRate                   int64            `json:"endRate,omitempty" yaml:"endRate,omitempty"`
-	RateRampUpTime            int64            `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
+	RateRampUpTime            time.Duration    `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
 	SkipMintConfirmations     bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
 	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 }
 
 type TestCaseConfig struct {
-	Name    fftypes.FFEnum `json:"name" yaml:"name"`
-	Workers int            `json:"workers" yaml:"workers"`
+	Name           fftypes.FFEnum `json:"name" yaml:"name"`
+	Workers        int            `json:"workers" yaml:"workers"`
+	ActionsPerLoop int            `json:"actionsPerLoop" yaml:"actionsPerLoop"`
 }
 
 type NodeConfig struct {
@@ -100,13 +101,14 @@ type MessageOptions struct {
 }
 
 type TokenOptions struct {
-	TokenType              string      `json:"tokenType" yaml:"tokenType"`
-	TokenPoolConnectorName string      `json:"poolConnectorName" yaml:"poolConnectorName"`
-	SupportsData           *bool       `json:"supportsData" yaml:"supportsData"` // Needs to be a pointer to allow defaulting to 'true'
-	SupportsURI            bool        `json:"supportsURI" yaml:"supportsURI"`
-	ExistingPoolName       string      `json:"existingPoolName" yaml:"existingPoolName"`
-	RecipientAddress       string      `json:"mintRecipient,omitempty" yaml:"mintRecipient,omitempty"`
-	Config                 TokenConfig `json:"config" yaml:"config"`
+	TokenType              string        `json:"tokenType" yaml:"tokenType"`
+	TokenPoolConnectorName string        `json:"poolConnectorName" yaml:"poolConnectorName"`
+	SupportsData           *bool         `json:"supportsData" yaml:"supportsData"` // Needs to be a pointer to allow defaulting to 'true'
+	SupportsURI            bool          `json:"supportsURI" yaml:"supportsURI"`
+	ExistingPoolName       string        `json:"existingPoolName" yaml:"existingPoolName"`
+	RecipientAddress       string        `json:"mintRecipient,omitempty" yaml:"mintRecipient,omitempty"`
+	Config                 TokenConfig   `json:"config" yaml:"config"`
+	MaxTokenBalanceWait    time.Duration `json:"maxTokenBalanceWait,omitempty" yaml:"maxTokenBalanceWait,omitempty"`
 }
 
 type TokenConfig struct {
