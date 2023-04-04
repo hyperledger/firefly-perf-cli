@@ -93,7 +93,6 @@ The `ffperf` tool registers the following metrics for prometheus to consume:
 
 - ffperf_runner_received_events_total
 - ffperf_runner_incomplete_events_total
-- ffperf_runner_unexpected_events_total
 - ffperf_runner_sent_mints_total
 - ffperf_runner_sent_mint_errors_total
 - ffperf_running_mint_token_balance (gauge)

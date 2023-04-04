@@ -85,12 +85,6 @@ var incompleteEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var unexpectedEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
-	Namespace: METRICS_NAMESPACE,
-	Name:      "unexpected_events_total",
-	Subsystem: METRICS_SUBSYSTEM,
-})
-
 var deliquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "deliquent_msgs_total",
@@ -111,7 +105,6 @@ func init() {
 	prometheus.Register(mintBalanceGauge)
 	prometheus.Register(receivedEventsCounter)
 	prometheus.Register(incompleteEventsCounter)
-	prometheus.Register(unexpectedEventsCounter)
 	prometheus.Register(totalActionsCounter)
 	prometheus.Register(perfTestDurationHistogram)
 }
@@ -403,7 +396,7 @@ func (pr *perfRunner) Start() (err error) {
 
 perfLoop:
 	for pr.daemon || time.Now().Unix() < pr.endTime {
-		timeout := time.After(10 * time.Second)
+		timeout := time.After(60 * time.Second)
 
 		// If we've been given a maximum number of actions to perform, check if we're done
 		if pr.cfg.MaxActions > 0 && int64(getMetricVal(totalActionsCounter)) >= pr.cfg.MaxActions {
@@ -454,7 +447,6 @@ perfLoop:
 	log.Infof(" - Prometheus metric sent_mint_errors_total  = %f\n", getMetricVal(sentMintErrorCounter))
 	log.Infof(" - Prometheus metric mint_token_balance      = %f\n", getMetricVal(mintBalanceGauge))
 	log.Infof(" - Prometheus metric received_events_total   = %f\n", getMetricVal(receivedEventsCounter))
-	log.Infof(" - Prometheus metric unexpected_events_total = %f\n", getMetricVal(unexpectedEventsCounter))
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric deliquent_msgs_total    = %f\n", getMetricVal(deliquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
@@ -536,8 +528,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				}
 			default:
 				workerIDFromTag := ""
-				log.Warnf("Trying to handle event of unexpected type %v", event.Type)
-				unexpectedEventsCounter.Inc()
 
 				if event.Type.String() == "protocol_error" {
 					// Can't do anything but shut down gracefully
@@ -648,8 +638,11 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
-				// Wait until the rate limiter allows us to proceed
-				limiter.Wait(pr.ctx)
+
+				// If configured with rate limiting, wait until the rate limiter allows us to proceed
+				if pr.cfg.StartRate > 0 {
+					limiter.Wait(pr.ctx)
+				}
 
 				if pr.allActionsComplete() {
 					break
@@ -679,9 +672,9 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				// before making itself available for the next job
 				confirmationsPerAction = 0
 			} else {
-				confirmationsPerAction += len(pr.nodeURLs)
+				confirmationsPerAction = len(pr.nodeURLs)
 				if testName == conf.PerfTestBlobPrivateMsg.String() || testName == conf.PerfTestPrivateMsg.String() {
-					confirmationsPerAction += 2
+					confirmationsPerAction = 2
 				}
 			}
 
@@ -758,7 +751,7 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		log.Errorf("Could not create subscription: %s", err)
 		return "", "", err
@@ -964,7 +957,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		return "", err
 	}
@@ -996,7 +989,7 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		return "", err
 	}
@@ -1035,7 +1028,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
 		return "", "", err
@@ -1075,7 +1068,7 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
 		return "", "", err
@@ -1108,7 +1101,7 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 		SetBody([]byte(payload)).
 		SetResult(&response).
 		SetError(&resError).
-		Get(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/tokens/balances", pr.client.BaseURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Get(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/tokens/balances", pr.client.BaseURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
 		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}

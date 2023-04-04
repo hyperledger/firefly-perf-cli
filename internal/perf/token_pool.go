@@ -46,7 +46,7 @@ func (pr *perfRunner) CreateTokenPool() error {
 
 	res, err := pr.client.R().
 		SetBody(&body).
-		Post(fmt.Sprintf("/%s/api/v1/namespaces/%s/tokens/pools?confirm=true", pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("/%sapi/v1/namespaces/%s/tokens/pools?confirm=true", pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 
 	if err != nil || !res.IsSuccess() {
 		return errors.New("Failed to create token pool")
