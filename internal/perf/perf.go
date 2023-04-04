@@ -51,7 +51,7 @@ var METRICS_SUBSYSTEM = "runner"
 
 var totalActionsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Namespace: METRICS_NAMESPACE,
-	Name:      "actions_total",
+	Name:      "actions_submitted_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
@@ -457,10 +457,10 @@ perfLoop:
 	log.Infof(" - Prometheus metric unexpected_events_total = %f\n", getMetricVal(unexpectedEventsCounter))
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric deliquent_msgs_total    = %f\n", getMetricVal(deliquentMsgsCounter))
-	log.Infof(" - Prometheus metric actions_total           = %f\n", getMetricVal(totalActionsCounter))
+	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
 	log.Infof(" - Test duration (secs): %d", endTime-pr.startTime)
-	log.Infof(" - Total actions: %d", pr.totalSummary)
-	log.Infof(" - Actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
+	log.Infof(" - Completed actions: %d", pr.totalSummary)
+	log.Infof(" - Completed actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
 
 	return nil
 }

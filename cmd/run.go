@@ -264,8 +264,8 @@ func validateConfig(cfg *conf.RunnerConfig, instance *conf.InstanceConfig, globa
 	if len(globalConfig.Nodes) > 0 && globalConfig.StackJSONPath != "" {
 		return fmt.Errorf("FireFly performance CLI cannot be configured with manual nodes and a local FireFly stack")
 	}
-	if (instance.ManualNodeIndex + 1) > len(globalConfig.Nodes) {
-		return fmt.Errorf("NodeIndex %d not valid - only %d nodes have been configured", instanceIndex, len(globalConfig.Nodes))
+	if len(globalConfig.Nodes) > 0 && ((instance.ManualNodeIndex + 1) > len(globalConfig.Nodes)) {
+		return fmt.Errorf("NodeIndex %d not valid - only %d nodes have been configured", instance.ManualNodeIndex, len(globalConfig.Nodes))
 	}
 	return nil
 }
