@@ -6,6 +6,7 @@ RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 BASE_PATH=~/ffperf-testing
+FF_CLI=ff
 
 # Verify three arguments were given
 if [ $# -ne 3 ]; then
@@ -35,11 +36,11 @@ make docker
 cd $BASE_PATH
 # Remove old Firefly stack
 printf "${PURPLE}Removing FireFly Stack: $OLD_STACK_NAME...\n${NC}"
-ff remove -f $OLD_STACK_NAME
+${FF_CLI} remove -f $OLD_STACK_NAME
 
 # Create new Firefly stack
 printf "${PURPLE}Creating FireFly Stack: $NEW_STACK_NAME...\n${NC}"
-ff init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc20_erc721 -c evmconnect -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --connector-config ethconnect.yml --core-config core-config.yml
+${FF_CLI} init $NEW_STACK_NAME 2 --manifest $BASE_PATH/firefly/manifest.json -t erc20_erc721 -c evmconnect -d postgres -b $BLOCKCHAIN_PROVIDER --prometheus-enabled --block-period 1 --connector-config ethconnect.yml --core-config core-config.yml
 
 cat <<EOF > ~/.firefly/stacks/$NEW_STACK_NAME/docker-compose.override.yml
 version: "2.1"
@@ -71,7 +72,7 @@ services:
 EOF
 
 printf "${PURPLE}Starting FireFly Stack: $NEW_STACK_NAME...\n${NC}"
-ff start $NEW_STACK_NAME --verbose --no-rollback
+${FF_CLI} start $NEW_STACK_NAME --verbose --no-rollback
 
 cd $BASE_PATH
 
@@ -80,7 +81,7 @@ printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 TESTS='{"name": "msg_broadcast", "workers":50},{"name": "msg_private", "workers":50},{"name": "blob_broadcast", "workers":30},{"name": "blob_private", "workers":30}'
 
 if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
-    output=$(ff deploy ethereum $NEW_STACK_NAME ./firefly/test/data/contracts/simplestorage/simple_storage.json | jq -r '.address')
+    output=$(${FF_CLI} deploy ethereum $NEW_STACK_NAME ./firefly/test/data/contracts/simplestorage/simple_storage.json | jq -r '.address')
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
     FLAGS="$FLAGS -a $CONTRACT_ADDRESS"
@@ -88,7 +89,7 @@ if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
     CONTRACT_OPTIONS="{\"address\": \"${CONTRACT_ADDRESS}\"}"
 elif [ "$BLOCKCHAIN_PROVIDER" == "fabric" ]; then
     docker run --rm -v $BASE_PATH/firefly/test/data/assetcreator:/chaincode-go hyperledger/fabric-tools:2.4 peer lifecycle chaincode package /chaincode-go/package.tar.gz --path /chaincode-go --lang golang --label assetcreator
-    output=$(ff deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
+    output=$(${FF_CLI} deploy $NEW_STACK_NAME ./firefly/test/data/assetcreator/package.tar.gz firefly assetcreator 1.0)
     CONTRACT_OPTIONS="{\"channel\": \"firefly\", \"chaincode\": \"assetcreator\"}"
     TESTS="${TESTS},{\"name\": \"custom_fabric_contract\", \"workers\":50}"
 fi
