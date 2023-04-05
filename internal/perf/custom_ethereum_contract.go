@@ -81,7 +81,7 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resContractCall).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}

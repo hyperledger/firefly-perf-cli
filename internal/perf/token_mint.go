@@ -106,7 +106,7 @@ func (tc *tokenMint) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resTransfer).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%s/api/v1/namespaces/%s/tokens/mint", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/tokens/mint", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	sentMintsCounter.Inc()
 	if err != nil || res.IsError() {
 		sentMintErrorCounter.Inc()
