@@ -14,6 +14,12 @@ can perform under normal conditions for an extended period of time.
 - Contract Invocation (`POST /contracts/invoke`)
   - Ethereum vs. Fabric
 
+## Build
+
+The `ffperf` CLI needs building before you can use it.
+
+Run `make install` in the root directory to build and install the `ffperf` command.
+
 ## Run
 
 The test configuration is structured around running `ffperf` as either a single process or in a distributed fashion as
