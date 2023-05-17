@@ -72,7 +72,7 @@ and an instance index or name indicating which instance the process should run:
 ffperf run -c /path/to/instances.yaml -i 0
 ```
 
-See [`example-remote-node-instances.yaml`](config/example-remote-node-instances.yaml) for examples of how to define nodes manually
+See [`example-remote-node-instances-fungible.yaml`](config/example-remote-node-instances-fungible.yaml) and [`example-remote-node-instances-nonfungible.yaml`](config/example-remote-node-instances-nonfungible.yaml) for examples of how to define nodes manually
 and configure test instances to use them.
 
 ## Command line options
