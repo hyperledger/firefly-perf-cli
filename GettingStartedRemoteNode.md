@@ -2,6 +2,12 @@
 
 These instructions will help you get started with running performance tests against a FireFly node running on a remote system.
 
+The tests available to run against a remote FireFly node are more limited because the test cannot setup all of the FireFly components required for more involved tests, such as messaging between multiple instances of FireFly in a consortium.
+
+However, they can be used to submit token mint transactions to remote FireFly instance which can be very useful to performance test the overall throughput of the system. The example configuration files [example-remote-node-instances-nonfungible.yaml](config/example-remote-node-instances-nonfungible.yaml) and [example-remote-node-instances-fungible.yaml](config/example-remote-node-instances-fungible.yaml)) show how to configure the test client to submit NFT mint transactions or ERC20 mint transactions respectively. Follow the [manual run](#option-1:-manually-run-the-test) steps below to quickly run the performance client using an existing configuration file.
+
+Note: you must create a FireFly token pool before running either of the remote examples. Modify the example and set the name of the FireFly token pool you want to test. You will also need to set the signing key to a key that FireFly has access to sign with.
+
 ## File Structure Setup
 
 - Create a folder structure as below:
@@ -36,14 +42,29 @@ git checkout ...
 
 ## Preparing Test
 
-### Run script to setup test
+### Option 1: Manually run the test
+
+If you have a configuration file (such as the remote NFT test file [here](config/example-remote-node-instances-nonfungible.yaml) or remote ERC20 test file [here](config/example-remote-node-instances-fungible.yaml))
+you can start and stop the test manually without running the prep script.
+
+Simply run the `ffperf` command with the location of the configuration file and the name of the test to run from that file, for example:
+
+```
+ffperf run -c <location-of-instances.yml> -n test1
+```
+
+### Option 2: Run script to setup test
+
+This option helps to run everything needed for the test. The prep script takes input parameters that it uses to generate an `instances.yml` configuration file. The script only supports a subset of the
+most common test options. To use the advanced test options you will need to modify the `instances.yml` file after it has been generated.
 
 - `./prepForRemote.sh` is a script that does the following:
 
   1. Kills existing perf test
   2. Installs local FireFly Perf CLI
   3. Starts a local prometheus container configured to consume metrics from ffperf
-  4. Outputs command to kick off test
+  4. Sets up a configuration file based on the provided arguments
+  5. Outputs command to kick off test
 
 - Run:
   ```bash
@@ -55,7 +76,7 @@ git checkout ...
 
 ## Getting Logs
 
-- `./getPerfCliLogs.sh` is a script that does the following:
+- `./getPerfClientLogs.sh` is a script that does the following:
 
   2. Stores the compressed ffperf logs in a timestamped directory in ~/ff-perf-testing
   3. ```bash
@@ -68,7 +89,7 @@ git checkout ...
 
   ```bash
   cd ~/ffperf-testing
-  ./getPerfCliLogsLogs.sh
+  ./getPerfClientLogs.sh
   ```
 
 ## Viewing Grafana
