@@ -193,7 +193,6 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 
 		runnerConfig.MessageOptions = instance.MessageOptions
 		runnerConfig.TokenOptions = instance.TokenOptions
-		runnerConfig.ContractOptions = instance.ContractOptions
 
 		runnerConfig.SenderURL = runnerConfig.NodeURLs[instance.Sender]
 		if instance.Recipient != nil {
@@ -203,6 +202,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	}
 
 	// Common configuration regardless of running with manually defined nodes or a local stack
+	runnerConfig.ContractOptions = instance.ContractOptions
 	runnerConfig.SkipMintConfirmations = instance.SkipMintConfirmations
 	runnerConfig.Length = instance.Length
 	runnerConfig.Daemon = perfConfig.Daemon
