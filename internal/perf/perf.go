@@ -951,20 +951,22 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 		"topic": "%s"
 	}`, pr.cfg.ContractOptions.Address, fftypes.NewUUID())
 
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
+		SetResult(&responseBody).
+		SetError(&errResponse).
 		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
 	if err != nil {
 		return "", err
 	}
-	var responseBody map[string]interface{}
-	err = json.Unmarshal(res.Body(), &responseBody)
-	if err != nil {
-		return "", err
+	if res.IsError() {
+		return "", fmt.Errorf("Failed: %s", errResponse)
 	}
 	id := responseBody["id"].(string)
 	log.Infof("Created contract listener on %s: %s", nodeURL, id)
