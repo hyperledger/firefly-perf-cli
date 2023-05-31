@@ -256,6 +256,8 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
+	log.Infof("Running test:\n%+v", pr.cfg)
+
 	for _, nodeURL := range pr.nodeURLs {
 
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) {
