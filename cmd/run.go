@@ -152,7 +152,6 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		// Use manual endpoint configuration instead of getting it from a FireFly stack
 		log.Infof("Running test against manual endpoint \"%s\"\n", perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
 
-		runnerConfig.TokenOptions = instance.TokenOptions
 		runnerConfig.NodeURLs = make([]string, 0)
 		runnerConfig.NodeURLs = append(runnerConfig.NodeURLs, perfConfig.Nodes[instance.ManualNodeIndex].APIEndpoint)
 		runnerConfig.SenderURL = runnerConfig.NodeURLs[0]
@@ -191,16 +190,17 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 			runnerConfig.NodeURLs[i] = fmt.Sprintf("%s://%s:%v", scheme, member.FireflyHostname, member.ExposedFireflyPort)
 		}
 
-		runnerConfig.MessageOptions = instance.MessageOptions
-		runnerConfig.TokenOptions = instance.TokenOptions
-		runnerConfig.ContractOptions = instance.ContractOptions
-
 		runnerConfig.SenderURL = runnerConfig.NodeURLs[instance.Sender]
 		if instance.Recipient != nil {
 			runnerConfig.RecipientOrg = fmt.Sprintf("did:firefly:org/%s", stack.Members[*instance.Recipient].OrgName)
 			runnerConfig.RecipientAddress = stack.Members[*instance.Recipient].Address
 		}
 	}
+
+	runnerConfig.TokenOptions = instance.TokenOptions
+	runnerConfig.MessageOptions = instance.MessageOptions
+	runnerConfig.TokenOptions = instance.TokenOptions
+	runnerConfig.ContractOptions = instance.ContractOptions
 
 	// Common configuration regardless of running with manually defined nodes or a local stack
 	runnerConfig.SkipMintConfirmations = instance.SkipMintConfirmations
