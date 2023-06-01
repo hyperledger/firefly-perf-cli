@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -155,26 +156,28 @@ type inflightTest struct {
 var mintStartingBalance int
 
 type perfRunner struct {
-	bfr               chan int
-	cfg               *conf.RunnerConfig
-	client            *resty.Client
-	ctx               context.Context
-	shutdown          context.CancelFunc
-	startTime         int64
-	endTime           int64
-	msgTimeMap        map[string]*inflightTest
-	totalSummary      int64
-	poolName          string
-	poolConnectorName string
-	tagPrefix         string
-	wsconns           []wsclient.WSClient
-	wsReceivers       []chan string
-	wsUUID            fftypes.UUID
-	nodeURLs          []string
-	subscriptionMap   map[string]SubscriptionInfo
-	daemon            bool
-	sender            string
-	totalWorkers      int
+	bfr                     chan int
+	cfg                     *conf.RunnerConfig
+	client                  *resty.Client
+	ctx                     context.Context
+	shutdown                context.CancelFunc
+	startTime               int64
+	endTime                 int64
+	msgTimeMap              map[string]*inflightTest
+	totalSummary            int64
+	poolName                string
+	poolConnectorName       string
+	tagPrefix               string
+	wsconns                 []wsclient.WSClient
+	wsReceivers             []chan string
+	wsUUID                  fftypes.UUID
+	nodeURLs                []string
+	subscriptionMap         map[string]SubscriptionInfo
+	listenerIDsForNodes     map[string][]string
+	subscriptionIDsForNodes map[string][]string
+	daemon                  bool
+	sender                  string
+	totalWorkers            int
 }
 
 type SubscriptionInfo struct {
@@ -259,7 +262,11 @@ func (pr *perfRunner) Start() (err error) {
 
 	log.Infof("Running test:\n%+v", pr.cfg)
 
+	pr.listenerIDsForNodes = make(map[string][]string)
+	pr.subscriptionIDsForNodes = make(map[string][]string)
 	for _, nodeURL := range pr.nodeURLs {
+		pr.listenerIDsForNodes[nodeURL] = []string{}
+		pr.subscriptionIDsForNodes[nodeURL] = []string{}
 
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) {
 			subID, subName, err := pr.createTokenMintSub(nodeURL)
@@ -445,6 +452,10 @@ perfLoop:
 	pr.detectDeliquentMsgs()
 	time.Sleep(20 * time.Second)
 
+	log.Info("Cleaning up")
+
+	pr.cleanup()
+
 	log.Info("Shutdown summary:")
 	log.Infof(" - Prometheus metric sent_mints_total        = %f\n", getMetricVal(sentMintsCounter))
 	log.Infof(" - Prometheus metric sent_mint_errors_total  = %f\n", getMetricVal(sentMintErrorCounter))
@@ -458,6 +469,32 @@ perfLoop:
 	log.Infof(" - Completed actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
 
 	return nil
+}
+
+func (pr *perfRunner) cleanup() {
+	for _, nodeURL := range pr.nodeURLs {
+		subIDs := pr.subscriptionIDsForNodes[nodeURL]
+		lIDs := pr.listenerIDsForNodes[nodeURL]
+
+		for _, subID := range subIDs {
+			err := pr.deleteSubscription(nodeURL, subID)
+			if err != nil {
+				log.Warnf("failed to delete subscription with ID %s for node URL %s due to %s\n", subID, nodeURL, err.Error())
+			} else {
+				log.Infof("successfully deleted subscription with ID %s for node URL %s\n", subID, nodeURL)
+			}
+		}
+
+		for _, lID := range lIDs {
+			err := pr.deleteContractListener(nodeURL, lID)
+			if err != nil {
+				fmt.Printf("failed to delete listener with ID %s for node URL %s due to %s\n", lID, nodeURL, err.Error())
+			} else {
+				log.Infof("successfully deleted listener with ID %s for node URL %s\n", lID, nodeURL)
+			}
+		}
+	}
+
 }
 
 func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
@@ -747,7 +784,10 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	if err != nil {
+		return "", "", err
+	}
 	_, err = pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -755,7 +795,7 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil {
 		log.Errorf("Could not create subscription: %s", err)
 		return "", "", err
@@ -763,6 +803,7 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 
 	log.Infof("Created subscription on %s: %s", nodeURL, pr.tagPrefix)
 
+	pr.subscriptionIDsForNodes[nodeURL] = append(pr.subscriptionIDsForNodes[nodeURL], sub.ID.String())
 	return sub.ID.String(), sub.Name, nil
 }
 
@@ -957,6 +998,10 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 
 	var errResponse fftypes.RESTError
 	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners")
+	if err != nil {
+		return "", err
+	}
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -965,7 +1010,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 		SetBody(subPayload).
 		SetResult(&responseBody).
 		SetError(&errResponse).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil {
 		return "", err
 	}
@@ -974,6 +1019,8 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 	}
 	id := responseBody["id"].(string)
 	log.Infof("Created contract listener on %s: %s", nodeURL, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
 	return id, nil
 }
 
@@ -989,24 +1036,59 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 		"topic": "%s"
 	}`, pr.cfg.ContractOptions.Channel, pr.cfg.ContractOptions.Chaincode, fftypes.NewUUID())
 
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners")
+	if err != nil {
+		return "", err
+	}
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
 			"Content-Type": "application/json",
 		}).
 		SetBody(subPayload).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/listeners", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		SetResult(&responseBody).
+		SetError(&errResponse).
+		Post(fullPath)
 	if err != nil {
 		return "", err
 	}
-	var responseBody map[string]interface{}
 	err = json.Unmarshal(res.Body(), &responseBody)
 	if err != nil {
 		return "", err
 	}
+	if res.IsError() {
+		return "", fmt.Errorf("failed: %s", errResponse)
+	}
 	id := responseBody["id"].(string)
 	log.Infof("Created contract listener on %s: %s", nodeURL, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
 	return id, nil
+}
+
+func (pr *perfRunner) deleteSubscription(nodeURL string, subscriptionID string) error {
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions", subscriptionID)
+	if err != nil {
+		return err
+	}
+	_, err = pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept": "application/json",
+		}).
+		Delete(fullPath)
+	return err
+}
+
+func (pr *perfRunner) deleteContractListener(nodeURL string, listenerID string) error {
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners", listenerID)
+	_, err = pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept": "application/json",
+		}).
+		Delete(fullPath)
+	return err
 }
 
 func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID string, subName string, err error) {
@@ -1033,7 +1115,10 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	if err != nil {
+		return "", "", err
+	}
 	_, err = pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -1041,7 +1126,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil {
 		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
 		return "", "", err
@@ -1049,6 +1134,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 
 	log.Infof("Created contracts subscription on %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 
+	pr.subscriptionIDsForNodes[nodeURL] = append(pr.subscriptionIDsForNodes[nodeURL], sub.ID.String())
 	return sub.ID.String(), sub.Name, nil
 }
 
@@ -1073,7 +1159,10 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	if err != nil {
+		return "", "", err
+	}
 	_, err = pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -1081,7 +1170,7 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 		}).
 		SetBody(subPayload).
 		SetResult(&sub).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/subscriptions", nodeURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil {
 		log.Errorf("Could not create subscription on %s: %s", nodeURL, err)
 		return "", "", err
@@ -1089,6 +1178,7 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 
 	log.Infof("Created minted tokens subscription on %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
 
+	pr.subscriptionIDsForNodes[nodeURL] = append(pr.subscriptionIDsForNodes[nodeURL], sub.ID.String())
 	return sub.ID.String(), sub.Name, nil
 }
 
@@ -1101,6 +1191,10 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 
 	var response PaginatedResponse
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(pr.client.BaseURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "tokens/balances")
+	if err != nil {
+		return 0, nil
+	}
 	res, err := pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -1114,7 +1208,7 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 		SetBody([]byte(payload)).
 		SetResult(&response).
 		SetError(&resError).
-		Get(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/tokens/balances", pr.client.BaseURL, pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Get(fullPath)
 	if err != nil || res.IsError() {
 		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
