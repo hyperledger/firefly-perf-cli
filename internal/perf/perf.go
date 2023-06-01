@@ -45,6 +45,7 @@ import (
 var mutex = &sync.Mutex{}
 var limiter *rate.Limiter
 var TRANSPORT_TYPE = "websockets"
+var wsReadAhead = uint16(50)
 
 var METRICS_NAMESPACE = "ffperf"
 var METRICS_SUBSYSTEM = "runner"
@@ -726,6 +727,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, subName string, err error) {
 	var sub core.Subscription
 	readAhead := uint16(len(pr.wsReceivers))
+	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      name,
@@ -733,10 +735,10 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 		},
 		Options: core.SubscriptionOptions{
 			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead: &readAhead,
+				ReadAhead:  &readAhead,
+				FirstEvent: &firstEvent,
 			},
 		},
-		Ephemeral: true,
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeMessageConfirmed.String(),
 			Message: core.MessageFilter{
@@ -1010,16 +1012,23 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID string, subName string, err error) {
 	log.Infof("Creating contract subscription %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 	var sub core.Subscription
+	readAhead := uint16(len(pr.wsReceivers))
+	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      fmt.Sprintf("contracts_%s", pr.tagPrefix),
 			Namespace: pr.cfg.FFNamespace,
 		},
-		Ephemeral: true,
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeBlockchainEventReceived.String(),
 			BlockchainEvent: core.BlockchainEventFilter{
 				Listener: listenerID,
+			},
+		},
+		Options: core.SubscriptionOptions{
+			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
+				ReadAhead:  &readAhead,
+				FirstEvent: &firstEvent,
 			},
 		},
 		Transport: TRANSPORT_TYPE,
@@ -1045,7 +1054,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 
 func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName string, err error) {
 	log.Infof("Creating token mint subscription %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
-	readAhead := uint16(50)
+	readAhead := uint16(len(pr.wsReceivers))
 	firstEvent := core.SubOptsFirstEventNewest
 	var sub core.Subscription
 	subPayload := core.Subscription{
