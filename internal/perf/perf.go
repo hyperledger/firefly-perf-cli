@@ -87,7 +87,7 @@ var incompleteEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var deliquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var delinquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "deliquent_msgs_total",
 	Subsystem: METRICS_SUBSYSTEM,
@@ -101,7 +101,7 @@ var perfTestDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramO
 }, []string{"test"})
 
 func init() {
-	prometheus.Register(deliquentMsgsCounter)
+	prometheus.Register(delinquentMsgsCounter)
 	prometheus.Register(sentMintsCounter)
 	prometheus.Register(sentMintErrorCounter)
 	prometheus.Register(mintBalanceGauge)
@@ -231,7 +231,7 @@ func New(config *conf.RunnerConfig) PerfRunner {
 		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
 		wsconn, err := wsclient.New(pr.ctx, wsConfig, nil, pr.startSubscriptions)
 		if err != nil {
-			log.Error("Could not create websocket connection: %s", err)
+			log.Errorf("Could not create websocket connection: %s", err)
 		}
 		wsconns[i] = wsconn
 	}
@@ -243,7 +243,27 @@ func New(config *conf.RunnerConfig) PerfRunner {
 func (pr *perfRunner) Init() (err error) {
 	pr.client = getFFClient(pr.sender)
 	pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
-
+	// Set request retry with backoff
+	pr.client.
+		SetRetryCount(10).
+		// You can override initial retry wait time.
+		// Default is 100 milliseconds.
+		SetRetryWaitTime(1 * time.Second).
+		// MaxWaitTime can be overridden as well.
+		// Default is 2 seconds.
+		SetRetryMaxWaitTime(30 * time.Second).
+		AddRetryCondition(
+			// RetryConditionFunc type is for retry condition function
+			// input: non-nil Response OR request execution error
+			func(r *resty.Response, err error) bool {
+				if r.IsError() {
+					// Do not retry on duplicates, because FireFly should already be processing the transaction
+					return r.StatusCode() != 409
+				}
+				// Retry for all other errors
+				return err != nil
+			},
+		)
 	return nil
 }
 
@@ -419,14 +439,14 @@ perfLoop:
 		case pr.bfr <- i:
 			i++
 			if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
-				if pr.detectDeliquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 					break perfLoop
 				}
 				lastCheckedTime = time.Now()
 			}
 			break
 		case <-timeout:
-			if pr.detectDeliquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+			if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 				break perfLoop
 			}
 			lastCheckedTime = time.Now()
@@ -435,7 +455,7 @@ perfLoop:
 	}
 
 	// If configured, check that the balance of the mint recipient address is correct
-	if pr.detectDeliquentBalance() {
+	if pr.detectDelinquentBalance() {
 		if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 			log.Panic(fmt.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time"))
 		}
@@ -449,7 +469,7 @@ perfLoop:
 	endTime := time.Now().Unix()
 	log.Warn("Runner stopping in 30s")
 	time.Sleep(10 * time.Second)
-	pr.detectDeliquentMsgs()
+	pr.detectDelinquentMsgs()
 	time.Sleep(20 * time.Second)
 
 	log.Info("Cleaning up")
@@ -462,7 +482,7 @@ perfLoop:
 	log.Infof(" - Prometheus metric mint_token_balance      = %f\n", getMetricVal(mintBalanceGauge))
 	log.Infof(" - Prometheus metric received_events_total   = %f\n", getMetricVal(receivedEventsCounter))
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
-	log.Infof(" - Prometheus metric deliquent_msgs_total    = %f\n", getMetricVal(deliquentMsgsCounter))
+	log.Infof(" - Prometheus metric delinquent_msgs_total    = %f\n", getMetricVal(delinquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
 	log.Infof(" - Test duration (secs): %d", endTime-pr.startTime)
 	log.Infof(" - Completed actions: %d", pr.totalSummary)
@@ -671,7 +691,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			})
 
 			if histErr != nil {
-				log.Errorf("Error retreiving histogram: %s", histErr)
+				log.Errorf("Error retrieving histogram: %s", histErr)
 			}
 
 			startTime := time.Now()
@@ -750,7 +770,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				// Worker 0 periodically updates the mint balance gauge
 				currentBalance, err := pr.getMintRecipientBalance()
 				if err != nil {
-					log.Warnf("Failed to check token balance: ", err)
+					log.Warnf("Failed to check token balance: %v", err)
 				} else {
 					mintBalanceGauge.Set(float64(currentBalance) - float64(mintStartingBalance))
 				}
@@ -873,11 +893,10 @@ func getFFClient(node string) *resty.Client {
 	client := resty.New()
 	client.SetBaseURL(node)
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-
 	return client
 }
 
-func (pr *perfRunner) detectDeliquentMsgs() bool {
+func (pr *perfRunner) detectDelinquentMsgs() bool {
 	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
 	for trackingID, inflight := range pr.msgTimeMap {
@@ -904,7 +923,7 @@ func (pr *perfRunner) detectDeliquentMsgs() bool {
 // Since this could take some time after all mint requests have been submitted we allow until
 // the end of the test duration for the balance to reach the expected value.
 // Function returns true if the expected balance isn't correct, otherwise false
-func (pr *perfRunner) detectDeliquentBalance() bool {
+func (pr *perfRunner) detectDelinquentBalance() bool {
 
 	if containsTargetTest(pr.cfg.Tests, conf.PerfTestTokenMint) && pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
 		balanceEndTime := time.Now().Unix() + int64(pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds())
@@ -1218,4 +1237,12 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 
 func (pr *perfRunner) IsDaemon() bool {
 	return pr.daemon
+}
+
+func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
+	// Left pad worker ID to 5 digits (supporting up to 99,999 workers)
+	workerIdStr := fmt.Sprintf("%05d", workerId)
+	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
+	iterationIdStr := fmt.Sprintf("%09d", iteration)
+	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
 }

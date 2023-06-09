@@ -21,12 +21,14 @@ import (
 	"strconv"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
 
 type customEthereum struct {
 	testBase
+	iteration int
 }
 
 func newCustomEthereumTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
@@ -48,6 +50,7 @@ func (tc *customEthereum) IDType() TrackingIDType {
 }
 
 func (tc *customEthereum) RunOnce() (string, error) {
+	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, tc.iteration)
 	payload := fmt.Sprintf(`{
 		"location": {
 			"address": "%s"
@@ -69,8 +72,9 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		},
 		"input": {
 			"newValue": %v
-		}
-	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID)
+		},
+		"idempotencyKey": "%s"
+	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
@@ -83,7 +87,12 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		SetError(&resError).
 		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
-		return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
+		if res.StatusCode() == 409 {
+			log.Warnf("Request already received by FireFly: %+v", &resError)
+		} else {
+			return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
+		}
 	}
+	tc.iteration++
 	return strconv.Itoa(tc.workerID), nil
 }
