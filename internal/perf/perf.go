@@ -243,7 +243,27 @@ func New(config *conf.RunnerConfig) PerfRunner {
 func (pr *perfRunner) Init() (err error) {
 	pr.client = getFFClient(pr.sender)
 	pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
-
+	// Set request retry with backoff
+	pr.client.
+		SetRetryCount(10).
+		// You can override initial retry wait time.
+		// Default is 100 milliseconds.
+		SetRetryWaitTime(1 * time.Second).
+		// MaxWaitTime can be overridden as well.
+		// Default is 2 seconds.
+		SetRetryMaxWaitTime(30 * time.Second).
+		AddRetryCondition(
+			// RetryConditionFunc type is for retry condition function
+			// input: non-nil Response OR request execution error
+			func(r *resty.Response, err error) bool {
+				if r.IsError() {
+					// Do not retry on duplicates, because FireFly should already be processing the transaction
+					return r.StatusCode() != 409
+				}
+				// Retry for all other errors
+				return err != nil
+			},
+		)
 	return nil
 }
 
@@ -873,17 +893,6 @@ func getFFClient(node string) *resty.Client {
 	client := resty.New()
 	client.SetBaseURL(node)
 	client.SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true})
-
-	// Set request retry with backoff
-	client.
-		SetRetryCount(10).
-		// You can override initial retry wait time.
-		// Default is 100 milliseconds.
-		SetRetryWaitTime(1 * time.Second).
-		// MaxWaitTime can be overridden as well.
-		// Default is 2 seconds.
-		SetRetryMaxWaitTime(30 * time.Second)
-
 	return client
 }
 
@@ -1232,8 +1241,8 @@ func (pr *perfRunner) IsDaemon() bool {
 
 func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
 	// Left pad worker ID to 5 digits (supporting up to 99,999 workers)
-	workerIdStr := fmt.Sprintf("%5d", workerId)
+	workerIdStr := fmt.Sprintf("%05d", workerId)
 	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
-	iterationIdStr := fmt.Sprintf("%9d", workerId)
+	iterationIdStr := fmt.Sprintf("%09d", iteration)
 	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
 }

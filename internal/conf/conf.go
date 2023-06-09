@@ -17,6 +17,7 @@
 package conf
 
 import (
+	"crypto/tls"
 	"net/url"
 	"time"
 
@@ -132,6 +133,8 @@ type FireFlyWsConfig struct {
 	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
 	AuthUsername           string        `mapstructure:"authUsername" json:"authUsername" yaml:"authUsername"`
 	AuthPassword           string        `mapstructure:"authPassword" json:"authPassword" yaml:"authPassword"`
+	DisableTLSVerification bool          `mapstructure:"disableTLSVerification" json:"disableTLSVerification" yaml:"disableTLSVerification"`
+	ConnectionTimeout      time.Duration `mapstructure:"connectionTimeout" json:"connectionTimeout" yaml:"connectionTimeout"`
 }
 
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig {
@@ -148,6 +151,10 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig 
 		HeartbeatInterval:      conf.HeartbeatInterval,
 		AuthUsername:           conf.AuthUsername,
 		AuthPassword:           conf.AuthPassword,
+		ConnectionTimeout:      conf.ConnectionTimeout,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: conf.DisableTLSVerification,
+		},
 	}
 }
 

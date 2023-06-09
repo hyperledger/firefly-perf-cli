@@ -21,6 +21,7 @@ import (
 	"strconv"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 )
@@ -86,7 +87,11 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		SetError(&resError).
 		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
 	if err != nil || res.IsError() {
-		return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
+		if res.StatusCode() == 409 {
+			log.Warnf("Request already received by FireFly: %+v", &resError)
+		} else {
+			return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
+		}
 	}
 	tc.iteration++
 	return strconv.Itoa(tc.workerID), nil
