@@ -145,6 +145,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	}
 
 	runnerConfig.WebSocket = perfConfig.WSConfig
+	runnerConfig.InvokeOptions = instance.InvokeOptions
 
 	if len(perfConfig.Nodes) > 0 {
 		// Use node configuration defined in the ffperf config file
