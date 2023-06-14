@@ -303,6 +303,20 @@ func (pr *perfRunner) Start() (err error) {
 				Job:     conf.PerfTestTokenMint,
 			}
 
+			// Create subscription for message confirmations if supportsData == true
+			if *pr.cfg.TokenOptions.SupportsData {
+				log.Infof("Creating message subscription for data in token mints")
+				subID, subName, err = pr.createMsgConfirmSub(nodeURL, pr.tagPrefix, fmt.Sprintf("^%s_", pr.tagPrefix))
+				if err != nil {
+					return err
+				}
+				pr.subscriptionMap[subID] = SubscriptionInfo{
+					NodeURL: nodeURL,
+					Name:    subName,
+					Job:     conf.PerfTestBroadcast,
+				}
+			}
+
 			if pr.cfg.TokenOptions.MaxTokenBalanceWait.Seconds() > 0 {
 				mintStartingBalance, err = pr.getMintRecipientBalance()
 
