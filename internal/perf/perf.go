@@ -256,13 +256,16 @@ func (pr *perfRunner) Init() (err error) {
 			// RetryConditionFunc type is for retry condition function
 			// input: non-nil Response OR request execution error
 			func(r *resty.Response, err error) bool {
-				log.Warnf("Retrying HTTP request. Status: '%v' Response: '%v' Error: '%v'", r.Status(), r.Body(), r.Error())
-				if r.IsError() {
-					// Do not retry on duplicates, because FireFly should already be processing the transaction
-					return r.StatusCode() != 409
+				if r.IsError() || err != nil {
+					if r.StatusCode() != 409 {
+						// Do not retry on duplicates, because FireFly should already be processing the transaction
+						return false
+					}
+					// Retry for all other errors
+					log.Warnf("Retrying HTTP request. Status: '%v' Response: '%s' Error: '%v'", r.Status(), r.Body(), r.Error())
+					return true
 				}
-				// Retry for all other errors
-				return err != nil
+				return false
 			},
 		)
 	return nil
