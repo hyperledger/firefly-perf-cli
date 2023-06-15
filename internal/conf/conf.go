@@ -26,6 +26,7 @@ import (
 )
 
 type RunnerConfig struct {
+	LogLevel                  string
 	Tests                     []TestCaseConfig
 	Length                    time.Duration
 	MessageOptions            MessageOptions
@@ -54,6 +55,7 @@ type RunnerConfig struct {
 }
 
 type PerformanceTestConfig struct {
+	LogLevel      string           `yaml:"logLevel" json:"logLevel"`
 	StackJSONPath string           `json:"stackJSONPath" yaml:"stackJSONPath"`
 	Instances     []InstanceConfig `json:"instances" yaml:"instances"`
 	WSConfig      FireFlyWsConfig  `json:"wsConfig,omitempty" yaml:"wsConfig,omitempty"`

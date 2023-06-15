@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/hyperledger/firefly v1.2.0
-	github.com/hyperledger/firefly-common v1.2.15
+	github.com/hyperledger/firefly-common v1.2.16
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/client_model v0.3.0
