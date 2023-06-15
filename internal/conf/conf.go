@@ -29,6 +29,7 @@ type RunnerConfig struct {
 	Tests                     []TestCaseConfig
 	Length                    time.Duration
 	MessageOptions            MessageOptions
+	InvokeOptions             interface{}
 	RecipientOrg              string
 	RecipientAddress          string
 	SigningKey                string
@@ -66,6 +67,7 @@ type InstanceConfig struct {
 	Tests                     []TestCaseConfig `yaml:"tests" json:"tests"`
 	Length                    time.Duration    `yaml:"length" json:"length"`
 	MessageOptions            MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	InvokeOptions             interface{}      `json:"invokeOptions,omitempty" yaml:"invokeOptions,omitempty"`
 	Sender                    int              `json:"sender" yaml:"sender"`
 	ManualNodeIndex           int              `json:"manualNodeIndex" yaml:"manualNodeIndex"`
 	Recipient                 *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`

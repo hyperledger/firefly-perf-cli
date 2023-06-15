@@ -17,6 +17,7 @@
 package perf
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -51,6 +52,13 @@ func (tc *customEthereum) IDType() TrackingIDType {
 
 func (tc *customEthereum) RunOnce() (string, error) {
 	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, tc.iteration)
+	invokeOptionsJSON := ""
+	if tc.pr.cfg.InvokeOptions != nil {
+		b, err := json.Marshal(tc.pr.cfg.InvokeOptions)
+		if err == nil {
+			invokeOptionsJSON = fmt.Sprintf(",\n		 \"options\": %s", b)
+		}
+	}
 	payload := fmt.Sprintf(`{
 		"location": {
 			"address": "%s"
@@ -73,8 +81,8 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		"input": {
 			"newValue": %v
 		},
-		"idempotencyKey": "%s"
-	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey)
+		"idempotencyKey": "%s"%s
+	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
