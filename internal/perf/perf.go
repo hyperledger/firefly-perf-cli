@@ -235,7 +235,7 @@ func New(config *conf.RunnerConfig) PerfRunner {
 	for i, nodeURL := range config.NodeURLs {
 		// Create websocket client
 		wsConfig := conf.GenerateWSConfig(nodeURL, &config.WebSocket)
-		wsconn, err := wsclient.New(pr.ctx, wsConfig, nil, pr.startSubscriptions)
+		wsconn, err := wsclient.New(context.Background(), wsConfig, nil, pr.startSubscriptions)
 		if err != nil {
 			log.Errorf("Could not create websocket connection: %s", err)
 		}
