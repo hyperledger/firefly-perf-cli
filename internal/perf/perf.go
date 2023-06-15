@@ -187,6 +187,12 @@ type SubscriptionInfo struct {
 }
 
 func New(config *conf.RunnerConfig) PerfRunner {
+	if config.LogLevel != "" {
+		if level, err := log.ParseLevel(config.LogLevel); err == nil {
+			log.SetLevel(level)
+		}
+	}
+
 	poolName := fmt.Sprintf("pool-%s", fftypes.NewUUID())
 
 	totalWorkers := 0
@@ -257,7 +263,7 @@ func (pr *perfRunner) Init() (err error) {
 			// input: non-nil Response OR request execution error
 			func(r *resty.Response, err error) bool {
 				if r.IsError() || err != nil {
-					if r.StatusCode() != 409 {
+					if r.StatusCode() == 409 {
 						// Do not retry on duplicates, because FireFly should already be processing the transaction
 						return false
 					}
@@ -538,6 +544,7 @@ func (pr *perfRunner) cleanup() {
 func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
 	log.Infof("Event loop started for %s...", nodeURL)
 	for {
+		log.Trace("blocking until wsconn.Receive or ctx.Done()")
 		select {
 		// Wait to receive websocket event
 		case msgBytes, ok := <-wsconn.Receive():
@@ -545,6 +552,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				log.Errorf("Error receiving websocket")
 				return
 			}
+			log.Trace("received from websocket")
 
 			receivedEventsCounter.Inc()
 

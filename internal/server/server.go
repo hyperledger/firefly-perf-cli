@@ -19,13 +19,15 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	log "github.com/sirupsen/logrus"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	log "github.com/sirupsen/logrus"
 )
 
 type HttpServer struct {
@@ -46,6 +48,10 @@ func NewHttpServer() *HttpServer {
 
 	hs.mux.HandleFunc("/status", statusHandler)
 	hs.mux.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 
 	hs.shutdown = make(chan struct{})
 
