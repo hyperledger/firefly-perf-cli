@@ -162,7 +162,9 @@ type perfRunner struct {
 	ctx                     context.Context
 	shutdown                context.CancelFunc
 	startTime               int64
+	startRecordTime         int64
 	endTime                 int64
+	endRecordTime           int64
 	msgTimeMap              map[string]*inflightTest
 	totalSummary            int64
 	poolName                string
@@ -485,16 +487,17 @@ perfLoop:
 		}
 	}
 
+	pr.endRecordTime = time.Now().Unix()
+	finalTps := pr.calculateCurrentTps(false)
 	pr.shutdown()
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
-	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
+	// After 30 seconds workers should be completed, so we check for delinquent messages
 	// one last time so metrics are up-to-date
 	endTime := time.Now().Unix()
 	log.Warn("Runner stopping in 30s")
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	pr.detectDelinquentMsgs()
-	time.Sleep(20 * time.Second)
 
 	log.Info("Cleaning up")
 
@@ -510,7 +513,7 @@ perfLoop:
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
 	log.Infof(" - Test duration (secs): %d", endTime-pr.startTime)
 	log.Infof(" - Completed actions: %d", pr.totalSummary)
-	log.Infof(" - Completed actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
+	log.Infof(" - Completed actions/sec: %2f", finalTps)
 
 	return nil
 }
@@ -657,7 +660,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				},
 			}
 			ackJSON, _ := json.Marshal(ack)
-			wsconn.Send(pr.ctx, ackJSON)
+			wsconn.Send(context.Background(), ackJSON)
 			// Release worker so it can continue to its next task
 			if !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
@@ -675,6 +678,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 // Calculate what the current rate limit is
 func (pr *perfRunner) getCurrentRate() int64 {
 	if pr.cfg.RateRampUpTime.Seconds() == 0 {
+		if pr.startRecordTime == 0 {
+			pr.startRecordTime = time.Now().Unix()
+		}
 		return pr.cfg.StartRate
 	}
 
@@ -682,6 +688,10 @@ func (pr *perfRunner) getCurrentRate() int64 {
 
 	// % of way through ramp up time
 	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime.Seconds()) * 100
+
+	if perc >= 100 && pr.startRecordTime == 0 {
+		pr.startRecordTime = time.Now().Unix()
+	}
 
 	// Rate to use now
 	rateNow := math.Min(float64(pr.cfg.StartRate)+(float64((pr.cfg.EndRate-pr.cfg.StartRate))/float64(100)*perc), float64(pr.cfg.EndRate))
@@ -1002,6 +1012,7 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 func (pr *perfRunner) markTestComplete(trackingID string) {
 	mutex.Lock()
 	pr.totalSummary++
+	pr.calculateCurrentTps(true)
 	delete(pr.msgTimeMap, trackingID)
 	mutex.Unlock()
 }
@@ -1271,4 +1282,19 @@ func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
 	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
 	iterationIdStr := fmt.Sprintf("%09d", iteration)
 	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
+}
+
+func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
+	// If we're still ramping, give the current rate during the ramp
+	// If we're done ramping, calculate TPS from the end of the ramp onward
+	startTime := pr.startRecordTime
+	if startTime == 0 {
+		startTime = pr.startTime
+	}
+	timeSinceStart := time.Since(time.Unix(pr.startRecordTime, 0))
+	currentTps := float64(pr.totalSummary) / timeSinceStart.Seconds()
+	if logValue {
+		log.Infof("Current TPS: %v", currentTps)
+	}
+	return currentTps
 }
