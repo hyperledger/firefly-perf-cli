@@ -161,6 +161,7 @@ type perfRunner struct {
 	client                  *resty.Client
 	ctx                     context.Context
 	shutdown                context.CancelFunc
+	stopping                bool
 	startTime               int64
 	startRecordTime         int64
 	endTime                 int64
@@ -487,9 +488,10 @@ perfLoop:
 		}
 	}
 
+	pr.stopping = true
 	pr.endRecordTime = time.Now().Unix()
 	finalTps := pr.calculateCurrentTps(false)
-	pr.shutdown()
+	// pr.shutdown()
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// After 30 seconds workers should be completed, so we check for delinquent messages
@@ -661,8 +663,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			}
 			ackJSON, _ := json.Marshal(ack)
 			wsconn.Send(context.Background(), ackJSON)
+			pr.recordCompletedAction()
 			// Release worker so it can continue to its next task
-			if !pr.cfg.SkipMintConfirmations {
+			if !pr.stopping && !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
 					pr.wsReceivers[workerID] <- nodeURL
 				}
@@ -790,7 +793,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				if len(trackingIDs) > 0 {
 					trackingIDs = trackingIDs[1:]
 				}
-				pr.markTestComplete(nextTrackingID)
+				pr.stopTrackingRequest(nextTrackingID)
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
 
@@ -1009,10 +1012,15 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) markTestComplete(trackingID string) {
+func (pr *perfRunner) recordCompletedAction() {
 	mutex.Lock()
 	pr.totalSummary++
 	pr.calculateCurrentTps(true)
+	mutex.Unlock()
+}
+
+func (pr *perfRunner) stopTrackingRequest(trackingID string) {
+	mutex.Lock()
 	delete(pr.msgTimeMap, trackingID)
 	mutex.Unlock()
 }
