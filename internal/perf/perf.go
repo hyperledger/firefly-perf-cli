@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -214,7 +213,7 @@ func New(config *conf.RunnerConfig) PerfRunner {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	startRampTime := time.Now().Unix()
-	endRampTime := time.Now().Unix() + int64(config.Ramp.Length.Seconds())
+	endRampTime := time.Now().Unix() + int64(config.RampLength.Seconds())
 	startTime := endRampTime
 	endTime := startTime + int64(config.Length.Seconds())
 
@@ -302,15 +301,6 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	log.Infof("Running test:\n%+v", pr.cfg)
-
-	if pr.cfg.Ramp.Length > 0 {
-		go func() {
-			timeout := time.After(pr.cfg.Ramp.Length)
-			<-timeout
-			log.Info("Ramp period has ended. Resetting counters.")
-		}()
-	}
-
 	pr.listenerIDsForNodes = make(map[string][]string)
 	pr.subscriptionIDsForNodes = make(map[string][]string)
 	for _, nodeURL := range pr.nodeURLs {
@@ -447,12 +437,19 @@ func (pr *perfRunner) Start() (err error) {
 				return fmt.Errorf("Unknown test case '%s'", test.Name)
 			}
 
-			go func() {
+			delayPerWorker := pr.cfg.RampLength / time.Duration(test.Workers)
+
+			go func(i int) {
+				// Delay the start of the next worker by (ramp time) / (number of workers)
+				if delayPerWorker > 0 {
+					time.Sleep(delayPerWorker * time.Duration(i))
+					log.Infof("Ramping up. Starting next worker after waiting %v", delayPerWorker)
+				}
 				err := pr.runLoop(tc)
 				if err != nil {
 					log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
 				}
-			}()
+			}(iWorker)
 			id++
 		}
 	}
@@ -693,29 +690,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 	}
 }
 
-// Calculate what the current rate limit is
-func (pr *perfRunner) getCurrentRate() int64 {
-	// If we haven't configured a ramp, go full throttle
-	if pr.cfg.Ramp.Length.Seconds() == 0 {
-		return -1
-	}
-
-	// If we're still ramping up, calculate the current rate
-	if time.Now().Before(time.Unix(pr.endRampTime, 0)) {
-		timeSinceStart := time.Since(time.Unix(pr.startRampTime, 0))
-
-		// % of way through ramp up time
-		perc := timeSinceStart.Seconds() / float64(pr.cfg.Ramp.Length.Seconds()) * 100
-
-		// Rate to use now
-		rateNow := math.Min(float64(pr.cfg.Ramp.StartRate)+(float64((pr.cfg.Ramp.EndRate-pr.cfg.Ramp.StartRate))/float64(100)*perc), float64(pr.cfg.Ramp.EndRate))
-
-		return int64(rateNow)
-	}
-	// Otherwise use the end ramp rate
-	return pr.cfg.Ramp.EndRate
-}
-
 func (pr *perfRunner) allActionsComplete() bool {
 	if pr.cfg.MaxActions > 0 && int64(getMetricVal(totalActionsCounter)) >= pr.cfg.MaxActions {
 		return true
@@ -728,15 +702,12 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	testName := tc.Name()
 	workerID := tc.WorkerID()
 
-	limiter = rate.NewLimiter(rate.Limit(pr.getCurrentRate()), 1)
-
 	loop := 0
 	for {
 		select {
 		case <-pr.bfr:
 			var confirmationsPerAction int
 			var actionsCompleted int
-			limiter.SetLimit(rate.Limit(pr.getCurrentRate()))
 
 			// Worker sends its task
 			hist, histErr := perfTestDurationHistogram.GetMetricWith(prometheus.Labels{
@@ -751,11 +722,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
-
-				// If configured with rate limiting, wait until the rate limiter allows us to proceed
-				if pr.cfg.Ramp.StartRate > 0 {
-					limiter.Wait(pr.ctx)
-				}
 
 				if pr.allActionsComplete() {
 					break

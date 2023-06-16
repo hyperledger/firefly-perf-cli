@@ -214,7 +214,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.APIPrefix = instance.APIPrefix
 	runnerConfig.MaxTimePerAction = instance.MaxTimePerAction
 	runnerConfig.MaxActions = instance.MaxActions
-	runnerConfig.Ramp = instance.RampConfig
+	runnerConfig.RampLength = instance.RampLength
 
 	// If delinquent action has been set on the test run instance this overrides the command line
 	if instance.DelinquentAction != "" {
