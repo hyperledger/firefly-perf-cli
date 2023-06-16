@@ -214,9 +214,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.APIPrefix = instance.APIPrefix
 	runnerConfig.MaxTimePerAction = instance.MaxTimePerAction
 	runnerConfig.MaxActions = instance.MaxActions
-	runnerConfig.StartRate = instance.StartRate
-	runnerConfig.EndRate = instance.EndRate
-	runnerConfig.RateRampUpTime = instance.RateRampUpTime
+	runnerConfig.Ramp = instance.RampConfig
 
 	// If delinquent action has been set on the test run instance this overrides the command line
 	if instance.DelinquentAction != "" {
@@ -242,11 +240,6 @@ func setDefaults(runnerConfig *conf.RunnerConfig) {
 	}
 	if runnerConfig.MaxTimePerAction.Seconds() == 0 {
 		runnerConfig.MaxTimePerAction = 60 * time.Second
-	}
-	if runnerConfig.StartRate == 0 {
-		runnerConfig.StartRate = runnerConfig.EndRate
-	} else if runnerConfig.EndRate == 0 {
-		runnerConfig.EndRate = runnerConfig.StartRate
 	}
 
 	for i, _ := range runnerConfig.Tests {
