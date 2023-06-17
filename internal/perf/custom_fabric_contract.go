@@ -67,11 +67,47 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"name": "CreateAsset",
 			"params": [
 				{
-					"name": "name",
+					"name": "id",
 					"schema": {
 						"type": "string",
 						"details": {
 							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "color",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "size",
+					"schema": {
+						"type": "number",
+						"details": {
+							"type": "number"
+						}
+					}
+				},
+				{
+					"name": "owner",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "appraisedValue",
+					"schema": {
+						"type": "number",
+						"details": {
+							"type": "number"
 						}
 					}
 				}
@@ -79,11 +115,15 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"returns": []
 		},
 		"input": {
-			"name": "%v"
+			"id": "%s",
+			"color": "green",
+			"size": 1,
+			"owner": "%v",
+			"appraisedValue": 2
 		},
 		"key": "%s",
 		"idempotencyKey": "%s"%s
-	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
+	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, idempotencyKey, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().

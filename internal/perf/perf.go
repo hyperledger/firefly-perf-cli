@@ -594,7 +594,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				case "ethereum":
 					value = event.BlockchainEvent.Output.GetString("value")
 				case "fabric":
-					value = event.BlockchainEvent.Output.GetString("name")
+					value = event.BlockchainEvent.Output.GetString("owner")
 				}
 				workerID, err = strconv.Atoi(value)
 				if err != nil {
