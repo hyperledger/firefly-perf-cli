@@ -82,8 +82,7 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"name": "%v"
 		},
 		"key": "%s",
-		"idempotencyKey": "%s"%s,
-
+		"idempotencyKey": "%s"%s
 	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
