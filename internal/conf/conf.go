@@ -48,9 +48,7 @@ type RunnerConfig struct {
 	APIPrefix                 string
 	MaxTimePerAction          time.Duration
 	MaxActions                int64
-	StartRate                 int64
-	EndRate                   int64
-	RateRampUpTime            time.Duration
+	RampLength                time.Duration
 	SkipMintConfirmations     bool
 }
 
@@ -80,9 +78,7 @@ type InstanceConfig struct {
 	FFNamespace               string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
 	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
-	StartRate                 int64            `json:"startRate,omitempty" yaml:"startRate,omitempty"`
-	EndRate                   int64            `json:"endRate,omitempty" yaml:"endRate,omitempty"`
-	RateRampUpTime            time.Duration    `json:"rateRampUpTime,omitempty" yaml:"rateRampUpTime,omitempty"`
+	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
 	SkipMintConfirmations     bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
 	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`

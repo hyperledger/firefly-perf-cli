@@ -21,7 +21,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -51,19 +50,19 @@ var wsReadAhead = uint16(50)
 var METRICS_NAMESPACE = "ffperf"
 var METRICS_SUBSYSTEM = "runner"
 
-var totalActionsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var totalActionsCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "actions_submitted_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var sentMintsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var sentMintsCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "sent_mints_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var sentMintErrorCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var sentMintErrorCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "sent_mint_errors_total",
 	Subsystem: METRICS_SUBSYSTEM,
@@ -75,19 +74,19 @@ var mintBalanceGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var receivedEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var receivedEventsCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "received_events_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var incompleteEventsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var incompleteEventsCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "incomplete_events_total",
 	Subsystem: METRICS_SUBSYSTEM,
 })
 
-var delinquentMsgsCounter = prometheus.NewCounter(prometheus.CounterOpts{
+var delinquentMsgsCounter = prometheus.NewGauge(prometheus.GaugeOpts{
 	Namespace: METRICS_NAMESPACE,
 	Name:      "deliquent_msgs_total",
 	Subsystem: METRICS_SUBSYSTEM,
@@ -100,7 +99,7 @@ var perfTestDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramO
 	Buckets:   []float64{1.0, 2.0, 5.0, 10.0, 30.0},
 }, []string{"test"})
 
-func init() {
+func Init() {
 	prometheus.Register(delinquentMsgsCounter)
 	prometheus.Register(sentMintsCounter)
 	prometheus.Register(sentMintErrorCounter)
@@ -161,9 +160,13 @@ type perfRunner struct {
 	client                  *resty.Client
 	ctx                     context.Context
 	shutdown                context.CancelFunc
+	stopping                bool
 	startTime               int64
 	endTime                 int64
+	startRampTime           int64
+	endRampTime             int64
 	msgTimeMap              map[string]*inflightTest
+	rampSummary             int64
 	totalSummary            int64
 	poolName                string
 	poolConnectorName       string
@@ -209,13 +212,20 @@ func New(config *conf.RunnerConfig) PerfRunner {
 	wsUUID := *fftypes.NewUUID()
 	ctx, cancel := context.WithCancel(context.Background())
 
+	startRampTime := time.Now().Unix()
+	endRampTime := time.Now().Unix() + int64(config.RampLength.Seconds())
+	startTime := endRampTime
+	endTime := startTime + int64(config.Length.Seconds())
+
 	pr := &perfRunner{
 		bfr:               make(chan int, totalWorkers),
 		cfg:               config,
 		ctx:               ctx,
 		shutdown:          cancel,
-		startTime:         time.Now().Unix(),
-		endTime:           time.Now().Unix() + int64(config.Length.Seconds()),
+		startRampTime:     startRampTime,
+		endRampTime:       endRampTime,
+		startTime:         startTime,
+		endTime:           endTime,
 		poolName:          poolName,
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
@@ -291,7 +301,6 @@ func (pr *perfRunner) Start() (err error) {
 	}
 
 	log.Infof("Running test:\n%+v", pr.cfg)
-
 	pr.listenerIDsForNodes = make(map[string][]string)
 	pr.subscriptionIDsForNodes = make(map[string][]string)
 	for _, nodeURL := range pr.nodeURLs {
@@ -428,12 +437,19 @@ func (pr *perfRunner) Start() (err error) {
 				return fmt.Errorf("Unknown test case '%s'", test.Name)
 			}
 
-			go func() {
+			delayPerWorker := pr.cfg.RampLength / time.Duration(test.Workers)
+
+			go func(i int) {
+				// Delay the start of the next worker by (ramp time) / (number of workers)
+				if delayPerWorker > 0 {
+					time.Sleep(delayPerWorker * time.Duration(i))
+					log.Infof("Ramping up. Starting next worker after waiting %v", delayPerWorker)
+				}
 				err := pr.runLoop(tc)
 				if err != nil {
 					log.Errorf("Worker %d failed: %s", tc.WorkerID(), err)
 				}
-			}()
+			}(iWorker)
 			id++
 		}
 	}
@@ -485,16 +501,17 @@ perfLoop:
 		}
 	}
 
-	pr.shutdown()
+	pr.stopping = true
+	measuredActions := pr.totalSummary
+	measuredTime := time.Since(time.Unix(pr.startTime, 0)).Seconds()
+	measuredTps := pr.calculateCurrentTps(true)
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
-	// about 10s into our sleep all workers should be completed, so we check for delinquent messages
+	// After 30 seconds workers should be completed, so we check for delinquent messages
 	// one last time so metrics are up-to-date
-	endTime := time.Now().Unix()
 	log.Warn("Runner stopping in 30s")
-	time.Sleep(10 * time.Second)
+	time.Sleep(30 * time.Second)
 	pr.detectDelinquentMsgs()
-	time.Sleep(20 * time.Second)
 
 	log.Info("Cleaning up")
 
@@ -508,9 +525,9 @@ perfLoop:
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric delinquent_msgs_total    = %f\n", getMetricVal(delinquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %d", endTime-pr.startTime)
-	log.Infof(" - Completed actions: %d", pr.totalSummary)
-	log.Infof(" - Completed actions/sec: %2f", float64(pr.totalSummary)/float64(endTime-pr.startTime))
+	log.Infof(" - Test duration (secs): %2f", measuredTime)
+	log.Infof(" - Measured actions: %d", measuredActions)
+	log.Infof(" - Measured actions/sec: %2f", measuredTps)
 
 	return nil
 }
@@ -577,7 +594,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				case "ethereum":
 					value = event.BlockchainEvent.Output.GetString("value")
 				case "fabric":
-					value = event.BlockchainEvent.Output.GetString("name")
+					value = event.BlockchainEvent.Output.GetString("Owner")
 				}
 				workerID, err = strconv.Atoi(value)
 				if err != nil {
@@ -657,9 +674,10 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				},
 			}
 			ackJSON, _ := json.Marshal(ack)
-			wsconn.Send(pr.ctx, ackJSON)
+			wsconn.Send(context.Background(), ackJSON)
+			pr.recordCompletedAction()
 			// Release worker so it can continue to its next task
-			if !pr.cfg.SkipMintConfirmations {
+			if !pr.stopping && !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
 					pr.wsReceivers[workerID] <- nodeURL
 				}
@@ -670,23 +688,6 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			return
 		}
 	}
-}
-
-// Calculate what the current rate limit is
-func (pr *perfRunner) getCurrentRate() int64 {
-	if pr.cfg.RateRampUpTime.Seconds() == 0 {
-		return pr.cfg.StartRate
-	}
-
-	timeSinceStart := time.Since(time.Unix(pr.startTime, 0))
-
-	// % of way through ramp up time
-	perc := timeSinceStart.Seconds() / float64(pr.cfg.RateRampUpTime.Seconds()) * 100
-
-	// Rate to use now
-	rateNow := math.Min(float64(pr.cfg.StartRate)+(float64((pr.cfg.EndRate-pr.cfg.StartRate))/float64(100)*perc), float64(pr.cfg.EndRate))
-
-	return int64(rateNow)
 }
 
 func (pr *perfRunner) allActionsComplete() bool {
@@ -701,15 +702,12 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	testName := tc.Name()
 	workerID := tc.WorkerID()
 
-	limiter = rate.NewLimiter(rate.Limit(pr.getCurrentRate()), 1)
-
 	loop := 0
 	for {
 		select {
 		case <-pr.bfr:
 			var confirmationsPerAction int
 			var actionsCompleted int
-			limiter.SetLimit(rate.Limit(pr.getCurrentRate()))
 
 			// Worker sends its task
 			hist, histErr := perfTestDurationHistogram.GetMetricWith(prometheus.Labels{
@@ -724,11 +722,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
-
-				// If configured with rate limiting, wait until the rate limiter allows us to proceed
-				if pr.cfg.StartRate > 0 {
-					limiter.Wait(pr.ctx)
-				}
 
 				if pr.allActionsComplete() {
 					break
@@ -746,11 +739,10 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					}
 				} else {
 					trackingIDs = append(trackingIDs, trackingID)
+					pr.markTestInFlight(tc, trackingID)
+					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
 					totalActionsCounter.Inc()
 				}
-
-				pr.markTestInFlight(tc, trackingID)
-				log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
 			}
 
 			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
@@ -776,11 +768,11 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 						break
 					}
 				}
-				nextTrackingID = trackingIDs[0]
 				if len(trackingIDs) > 0 {
+					nextTrackingID = trackingIDs[0]
 					trackingIDs = trackingIDs[1:]
+					pr.stopTrackingRequest(nextTrackingID)
 				}
-				pr.markTestComplete(nextTrackingID)
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
 
@@ -999,9 +991,19 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Unlock()
 }
 
-func (pr *perfRunner) markTestComplete(trackingID string) {
+func (pr *perfRunner) recordCompletedAction() {
+	if pr.ramping() {
+		pr.rampSummary++
+	} else {
+		pr.totalSummary++
+	}
 	mutex.Lock()
-	pr.totalSummary++
+	mutex.Unlock()
+	pr.calculateCurrentTps(true)
+}
+
+func (pr *perfRunner) stopTrackingRequest(trackingID string) {
+	mutex.Lock()
 	delete(pr.msgTimeMap, trackingID)
 	mutex.Unlock()
 }
@@ -1271,4 +1273,31 @@ func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
 	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
 	iterationIdStr := fmt.Sprintf("%09d", iteration)
 	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
+}
+
+func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
+	// If we're still ramping, give the current rate during the ramp
+	// If we're done ramping, calculate TPS from the end of the ramp onward
+	var startTime int64
+	var measuredActions int64
+	if pr.ramping() {
+		measuredActions = pr.rampSummary
+		startTime = pr.startRampTime
+	} else {
+		measuredActions = pr.totalSummary
+		startTime = pr.startTime
+	}
+	duration := time.Since(time.Unix(startTime, 0)).Seconds()
+	currentTps := float64(measuredActions) / duration
+	if logValue {
+		log.Infof("Current TPS: %v Measured Actions: %v Duration: %v", currentTps, measuredActions, duration)
+	}
+	return currentTps
+}
+
+func (pr *perfRunner) ramping() bool {
+	if time.Now().Before(time.Unix(pr.endRampTime, 0)) {
+		return true
+	}
+	return false
 }

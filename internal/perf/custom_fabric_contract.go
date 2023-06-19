@@ -17,6 +17,7 @@
 package perf
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -27,6 +28,7 @@ import (
 
 type customFabric struct {
 	testBase
+	iteration int
 }
 
 func newCustomFabricTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
@@ -48,6 +50,14 @@ func (tc *customFabric) IDType() TrackingIDType {
 }
 
 func (tc *customFabric) RunOnce() (string, error) {
+	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, tc.iteration)
+	invokeOptionsJSON := ""
+	if tc.pr.cfg.InvokeOptions != nil {
+		b, err := json.Marshal(tc.pr.cfg.InvokeOptions)
+		if err == nil {
+			invokeOptionsJSON = fmt.Sprintf(",\n		 \"options\": %s", b)
+		}
+	}
 	payload := fmt.Sprintf(`{
 		"location": {
 			"channel": "%s",
@@ -57,11 +67,47 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"name": "CreateAsset",
 			"params": [
 				{
-					"name": "name",
+					"name": "id",
 					"schema": {
 						"type": "string",
 						"details": {
 							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "color",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "size",
+					"schema": {
+						"type": "number",
+						"details": {
+							"type": "number"
+						}
+					}
+				},
+				{
+					"name": "owner",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "string"
+						}
+					}
+				},
+				{
+					"name": "appraisedValue",
+					"schema": {
+						"type": "number",
+						"details": {
+							"type": "number"
 						}
 					}
 				}
@@ -69,9 +115,15 @@ func (tc *customFabric) RunOnce() (string, error) {
 			"returns": []
 		},
 		"input": {
-			"name": "%v"
-		}
-	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, tc.workerID)
+			"id": "%s",
+			"color": "green",
+			"size": 1,
+			"owner": "%v",
+			"appraisedValue": 2
+		},
+		"key": "%s",
+		"idempotencyKey": "%s"%s
+	}`, tc.pr.cfg.ContractOptions.Channel, tc.pr.cfg.ContractOptions.Chaincode, idempotencyKey, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	res, err := tc.pr.client.R().
@@ -86,5 +138,6 @@ func (tc *customFabric) RunOnce() (string, error) {
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
+	tc.iteration++
 	return strconv.Itoa(tc.workerID), nil
 }
