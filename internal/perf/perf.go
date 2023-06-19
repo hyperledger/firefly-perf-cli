@@ -594,7 +594,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				case "ethereum":
 					value = event.BlockchainEvent.Output.GetString("value")
 				case "fabric":
-					value = event.BlockchainEvent.Output.GetString("owner")
+					value = event.BlockchainEvent.Output.GetString("Owner")
 				}
 				workerID, err = strconv.Atoi(value)
 				if err != nil {
@@ -739,11 +739,10 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					}
 				} else {
 					trackingIDs = append(trackingIDs, trackingID)
+					pr.markTestInFlight(tc, trackingID)
+					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
+					totalActionsCounter.Inc()
 				}
-
-				pr.markTestInFlight(tc, trackingID)
-				log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
-				totalActionsCounter.Inc()
 			}
 
 			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
@@ -769,11 +768,11 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 						break
 					}
 				}
-				nextTrackingID = trackingIDs[0]
 				if len(trackingIDs) > 0 {
+					nextTrackingID = trackingIDs[0]
 					trackingIDs = trackingIDs[1:]
+					pr.stopTrackingRequest(nextTrackingID)
 				}
-				pr.stopTrackingRequest(nextTrackingID)
 			}
 			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
 
