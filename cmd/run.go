@@ -212,6 +212,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.LogEvents = perfConfig.LogEvents
 	runnerConfig.DelinquentAction = deliquentAction
 	runnerConfig.FFNamespace = instance.FFNamespace
+	runnerConfig.APIPrefix = instance.APIPrefix
 	if instance.FFNamespaceBasePath != "" {
 		basePath, err := url.JoinPath(instance.APIPrefix, instance.FFNamespaceBasePath)
 		if err != nil {
