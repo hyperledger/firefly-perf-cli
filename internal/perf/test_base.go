@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/big"
+	"net/url"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
@@ -63,12 +64,15 @@ func (t *testBase) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (strin
 	// If there's no datatype, tell FireFly to automatically add a data payload
 	formData["autometa"] = "true"
 	formData["metadata"] = `{"mymeta": "data"}`
-
+	fullPath, err := url.JoinPath(nodeURL, t.pr.cfg.FFNamespacePath, "data")
+	if err != nil {
+		return "", err
+	}
 	resp, err := t.pr.client.R().
 		SetFormData(formData).
 		SetFileReader("file", "myfile.txt", bytes.NewReader(blob)).
 		SetResult(&data).
-		Post(fmt.Sprintf("%s/api/v1/namespaces/%s/data", nodeURL, t.pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil {
 		return "", nil
 	}
@@ -83,13 +87,17 @@ func (t *testBase) uploadBlob(blob []byte, hash [32]byte, nodeURL string) (strin
 
 func (t *testBase) downloadAndVerifyBlob(nodeURL, id string, expectedHash [32]byte) error {
 	var blob []byte
+	fullPath, err := url.JoinPath(nodeURL, t.pr.cfg.FFNamespacePath, "data", id, "blob")
+	if err != nil {
+		return err
+	}
 	res, err := t.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/octet",
 			"Content-Type": "application/json",
 		}).
 		SetResult(&blob).
-		Get(fmt.Sprintf("%s/api/v1/namespaces/%s/data/%s/blob", nodeURL, t.pr.cfg.FFNamespace, id))
+		Get(fullPath)
 	if err != nil {
 		return err
 	}

@@ -19,6 +19,7 @@ package perf
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
@@ -85,6 +86,10 @@ func (tc *customEthereum) RunOnce() (string, error) {
 	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "contracts/invoke")
+	if err != nil {
+		return "", err
+	}
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -93,7 +98,7 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resContractCall).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil || res.IsError() {
 		if res.StatusCode() == 409 {
 			log.Warnf("Request already received by FireFly: %+v", &resError)

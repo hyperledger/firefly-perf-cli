@@ -822,7 +822,7 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
 	}
@@ -1045,7 +1045,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 
 	var errResponse fftypes.RESTError
 	var responseBody map[string]interface{}
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners")
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/listeners")
 	if err != nil {
 		return "", err
 	}
@@ -1085,7 +1085,7 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 
 	var errResponse fftypes.RESTError
 	var responseBody map[string]interface{}
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners")
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/listeners")
 	if err != nil {
 		return "", err
 	}
@@ -1116,7 +1116,7 @@ func (pr *perfRunner) createFabricContractListener(nodeURL string) (string, erro
 }
 
 func (pr *perfRunner) deleteSubscription(nodeURL string, subscriptionID string) error {
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions", subscriptionID)
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions", subscriptionID)
 	if err != nil {
 		return err
 	}
@@ -1129,7 +1129,7 @@ func (pr *perfRunner) deleteSubscription(nodeURL string, subscriptionID string) 
 }
 
 func (pr *perfRunner) deleteContractListener(nodeURL string, listenerID string) error {
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "contracts/listeners", listenerID)
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/listeners", listenerID)
 	_, err = pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept": "application/json",
@@ -1162,7 +1162,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
 	}
@@ -1206,7 +1206,7 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 		},
 		Transport: TRANSPORT_TYPE,
 	}
-	fullPath, err := url.JoinPath(nodeURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "subscriptions")
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
 	}
@@ -1238,7 +1238,7 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 
 	var response PaginatedResponse
 	var resError fftypes.RESTError
-	fullPath, err := url.JoinPath(pr.client.BaseURL, pr.cfg.APIPrefix, "api/v1/namespaces", pr.cfg.FFNamespace, "tokens/balances")
+	fullPath, err := url.JoinPath(pr.client.BaseURL, pr.cfg.FFNamespacePath, "tokens/balances")
 	if err != nil {
 		return 0, nil
 	}

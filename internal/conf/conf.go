@@ -44,8 +44,9 @@ type RunnerConfig struct {
 	Daemon                    bool
 	LogEvents                 bool
 	SenderURL                 string
-	FFNamespace               string
 	APIPrefix                 string
+	FFNamespace               string
+	FFNamespacePath           string
 	MaxTimePerAction          time.Duration
 	MaxActions                int64
 	RampLength                time.Duration
@@ -76,6 +77,7 @@ type InstanceConfig struct {
 	ContractOptions           ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
 	APIPrefix                 string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
 	FFNamespace               string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
+	FFNamespaceBasePath       string           `json:"namespaceBasePath,omitempty" yaml:"namespaceBasePath,omitempty"`
 	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
 	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
