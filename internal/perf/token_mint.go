@@ -18,6 +18,7 @@ package perf
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly/pkg/core"
@@ -98,6 +99,10 @@ func (tc *tokenMint) RunOnce() (string, error) {
 
 	var resTransfer core.TokenTransfer
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "tokens/mint")
+	if err != nil {
+		return "", err
+	}
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -106,7 +111,7 @@ func (tc *tokenMint) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resTransfer).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/tokens/mint", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fullPath)
 	sentMintsCounter.Inc()
 	if err != nil || res.IsError() {
 		sentMintErrorCounter.Inc()

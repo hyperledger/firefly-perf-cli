@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path"
 	"time"
 
@@ -212,6 +213,13 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.DelinquentAction = deliquentAction
 	runnerConfig.FFNamespace = instance.FFNamespace
 	runnerConfig.APIPrefix = instance.APIPrefix
+	if instance.FFNamespaceBasePath != "" {
+		basePath, err := url.JoinPath(instance.APIPrefix, instance.FFNamespaceBasePath)
+		if err != nil {
+			return nil, err
+		}
+		runnerConfig.FFNamespacePath = basePath
+	}
 	runnerConfig.MaxTimePerAction = instance.MaxTimePerAction
 	runnerConfig.MaxActions = instance.MaxActions
 	runnerConfig.RampLength = instance.RampLength
@@ -235,6 +243,15 @@ func setDefaults(runnerConfig *conf.RunnerConfig) {
 	if runnerConfig.FFNamespace == "" {
 		runnerConfig.FFNamespace = "default"
 	}
+
+	if runnerConfig.FFNamespacePath == "" {
+		basePath, err := url.JoinPath(runnerConfig.APIPrefix, "api/v1/namespaces", runnerConfig.FFNamespace)
+		if err != nil {
+			log.Error(err.Error())
+		}
+		runnerConfig.FFNamespacePath = basePath
+	}
+
 	if runnerConfig.TokenOptions.TokenPoolConnectorName == "" {
 		runnerConfig.TokenOptions.TokenPoolConnectorName = "erc20_erc721"
 	}
