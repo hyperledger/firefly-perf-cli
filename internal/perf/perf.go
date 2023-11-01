@@ -774,10 +774,13 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					pr.stopTrackingRequest(nextTrackingID)
 				}
 			}
-			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
+			secondsPerLoop := time.Since(startTime).Seconds()
+			log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
 
 			if histErr == nil {
-				hist.Observe(time.Since(startTime).Seconds())
+				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
+
+				hist.Observe(secondsPerLoop)
 			}
 			loop++
 
