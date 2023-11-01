@@ -734,13 +734,15 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				if pr.allActionsComplete() {
 					break
 				}
-
-				trackingID, err := tc.RunOnce()
-				log.Infof("%d --> %s action %d sent after %f seconds", workerID, testName, actionsCompleted, time.Since(startTime).Seconds())
-				actionResponses <- &ActionResponse{
-					trackingID: trackingID,
-					err:        err,
-				}
+				actionCount := actionsCompleted
+				go func() {
+					trackingID, err := tc.RunOnce()
+					log.Infof("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
+					actionResponses <- &ActionResponse{
+						trackingID: trackingID,
+						err:        err,
+					}
+				}()
 			}
 			resultCount := 0
 			for {
