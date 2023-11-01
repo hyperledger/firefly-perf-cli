@@ -1296,7 +1296,7 @@ func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
 	workerIdStr := fmt.Sprintf("%05d", workerId)
 	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
 	iterationIdStr := fmt.Sprintf("%09d", iteration)
-	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
+	return fmt.Sprintf("%v-%s-%s-%s", pr.startTime, workerIdStr, iterationIdStr, fftypes.NewUUID())
 }
 
 func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
