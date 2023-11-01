@@ -760,6 +760,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 				// if we've reached the expected amount of metadata calls then stop
 				if resultCount == tc.ActionsPerLoop() {
+					log.Infof("%d --> %s All actions sent %d", workerID, testName, resultCount)
 					break
 				}
 			}
