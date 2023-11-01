@@ -719,6 +719,9 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			}
 
 			startTime := time.Now()
+			var sentTime time.Time
+			var submissionSeconds float64
+			var eventReceivingSeconds float64
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
@@ -728,7 +731,8 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 
 				trackingID, err := tc.RunOnce()
-
+				submissionSeconds = time.Since(startTime).Seconds()
+				sentTime = time.Now()
 				if err != nil {
 					if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 						return err
@@ -774,7 +778,11 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					pr.stopTrackingRequest(nextTrackingID)
 				}
 			}
-			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
+			eventReceivingSeconds = time.Since(sentTime).Seconds()
+			total := submissionSeconds + eventReceivingSeconds
+			subPortion := int((submissionSeconds / total) * 100)
+			envPortion := int((eventReceivingSeconds / total) * 100)
+			log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d)", workerID, testName, loop, submissionSeconds, eventReceivingSeconds, subPortion, envPortion)
 
 			if histErr == nil {
 				hist.Observe(time.Since(startTime).Seconds())
