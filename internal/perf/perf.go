@@ -719,6 +719,14 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			}
 
 			startTime := time.Now()
+
+			type ActionResponse struct {
+				trackingID string
+				err        error
+			}
+
+			actionResponses := make(chan *ActionResponse, tc.ActionsPerLoop())
+
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
@@ -729,22 +737,32 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 				trackingID, err := tc.RunOnce()
 
-				if err != nil {
-					if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-						return err
-					} else {
-						log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, err)
-						err = nil
-						continue
-					}
-				} else {
-					trackingIDs = append(trackingIDs, trackingID)
-					pr.markTestInFlight(tc, trackingID)
-					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
-					totalActionsCounter.Inc()
+				actionResponses <- &ActionResponse{
+					trackingID: trackingID,
+					err:        err,
 				}
 			}
-
+			resultCount := 0
+			for {
+				aResponse := <-actionResponses
+				resultCount++
+				if aResponse.err != nil {
+					if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+						return aResponse.err
+					} else {
+						log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, aResponse.err)
+					}
+				} else {
+					trackingIDs = append(trackingIDs, aResponse.trackingID)
+					pr.markTestInFlight(tc, aResponse.trackingID)
+					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, aResponse.trackingID)
+					totalActionsCounter.Inc()
+				}
+				// if we've reached the expected amount of metadata calls then stop
+				if resultCount == tc.ActionsPerLoop() {
+					break
+				}
+			}
 			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
 				// For minting tests a worker can (if configured) skip waiting for a matching response event
 				// before making itself available for the next job
