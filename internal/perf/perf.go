@@ -141,7 +141,7 @@ const (
 
 type TestCase interface {
 	WorkerID() int
-	RunOnce() (trackingID string, err error)
+	RunOnce(iterationCount int) (trackingID string, err error)
 	IDType() TrackingIDType
 	Name() string
 	ActionsPerLoop() int
@@ -736,7 +736,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 				actionCount := actionsCompleted
 				go func() {
-					trackingID, err := tc.RunOnce()
+					trackingID, err := tc.RunOnce(actionCount)
 					log.Infof("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
 					actionResponses <- &ActionResponse{
 						trackingID: trackingID,

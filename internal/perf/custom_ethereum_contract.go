@@ -30,7 +30,6 @@ import (
 
 type customEthereum struct {
 	testBase
-	iteration int
 }
 
 func newCustomEthereumTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
@@ -51,8 +50,8 @@ func (tc *customEthereum) IDType() TrackingIDType {
 	return TrackingIDTypeWorkerNumber
 }
 
-func (tc *customEthereum) RunOnce() (string, error) {
-	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, tc.iteration)
+func (tc *customEthereum) RunOnce(iterationCount int) (string, error) {
+	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, iterationCount)
 	invokeOptionsJSON := ""
 	if tc.pr.cfg.InvokeOptions != nil {
 		b, err := json.Marshal(tc.pr.cfg.InvokeOptions)
@@ -106,6 +105,5 @@ func (tc *customEthereum) RunOnce() (string, error) {
 			return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
 		}
 	}
-	tc.iteration++
 	return strconv.Itoa(tc.workerID), nil
 }
