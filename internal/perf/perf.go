@@ -116,7 +116,7 @@ func getMetricVal(collector prometheus.Collector) float64 {
 	metric := dto.Metric{}
 	err := (<-collectorChannel).Write(&metric)
 	if err != nil {
-		log.Error("Error writing metric: %s", err)
+		log.Error("error writing metric: %s", err)
 	}
 	if metric.Counter != nil {
 		return *metric.Counter.Value
@@ -434,7 +434,7 @@ func (pr *perfRunner) Start() (err error) {
 			case conf.PerfTestBlobPrivateMsg:
 				tc = newBlobPrivateTestWorker(pr, id, test.ActionsPerLoop)
 			default:
-				return fmt.Errorf("Unknown test case '%s'", test.Name)
+				return fmt.Errorf("unknown test case '%s'", test.Name)
 			}
 
 			delayPerWorker := pr.cfg.RampLength / time.Duration(test.Workers)
@@ -497,7 +497,7 @@ perfLoop:
 	// If configured, check that the balance of the mint recipient address is correct
 	if pr.detectDelinquentBalance() {
 		if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-			log.Panic(fmt.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time"))
+			log.Panic(fmt.Errorf("token mint recipient balance didn't reach the expected value in the allowed time"))
 		}
 	}
 
@@ -618,14 +618,14 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 							log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
 						}
 					} else {
-						log.Errorf("No URI in token transfer event: %s")
+						log.Errorf("no URI in token transfer event: %s")
 						b, _ := json.Marshal(&event)
 						log.Errorf("Full event: %s", b)
 
 						incompleteEventsCounter.Inc()
 
 						if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-							log.Panic(fmt.Errorf("Error - no URI found in token_transfer_confirmed event"))
+							log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
 						}
 					}
 				}
@@ -727,6 +727,9 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 			actionResponses := make(chan *ActionResponse, tc.ActionsPerLoop())
 
+			var sentTime time.Time
+			var submissionSecondsPerLoop float64
+			var eventReceivingSecondsPerLoop float64
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
@@ -762,7 +765,9 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 				// if we've reached the expected amount of metadata calls then stop
 				if resultCount == tc.ActionsPerLoop() {
-					log.Infof("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, time.Since(startTime).Seconds())
+					submissionSecondsPerLoop = time.Since(startTime).Seconds()
+					sentTime = time.Now()
+					log.Infof("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, submissionSecondsPerLoop)
 					break
 				}
 			}
@@ -796,7 +801,11 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 			}
 			secondsPerLoop := time.Since(startTime).Seconds()
-			log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
+			eventReceivingSecondsPerLoop = time.Since(sentTime).Seconds()
+			total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
+			subPortion := int((submissionSecondsPerLoop / total) * 100)
+			envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
+			log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
 
 			if histErr == nil {
 				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
@@ -1086,7 +1095,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 		return "", err
 	}
 	if res.IsError() {
-		return "", fmt.Errorf("Failed: %s", errResponse)
+		return "", fmt.Errorf("failed: %s", errResponse)
 	}
 	id := responseBody["id"].(string)
 	log.Infof("Created contract listener on %s: %s", nodeURL, id)
@@ -1281,7 +1290,7 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 		SetError(&resError).
 		Get(fullPath)
 	if err != nil || res.IsError() {
-		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
+		return 0, fmt.Errorf("error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
 
 	return response.Total, nil
