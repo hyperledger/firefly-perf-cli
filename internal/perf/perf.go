@@ -36,6 +36,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/hyperledger/firefly-perf-cli/internal/util"
 	"github.com/hyperledger/firefly/pkg/core"
 	dto "github.com/prometheus/client_model/go"
 	log "github.com/sirupsen/logrus"
@@ -155,16 +156,22 @@ type inflightTest struct {
 var mintStartingBalance int
 
 type perfRunner struct {
-	bfr                     chan int
-	cfg                     *conf.RunnerConfig
-	client                  *resty.Client
-	ctx                     context.Context
-	shutdown                context.CancelFunc
-	stopping                bool
-	startTime               int64
-	endTime                 int64
-	startRampTime           int64
-	endRampTime             int64
+	bfr           chan int
+	cfg           *conf.RunnerConfig
+	client        *resty.Client
+	ctx           context.Context
+	shutdown      context.CancelFunc
+	stopping      bool
+	startTime     int64
+	endSendTime   int64
+	endTime       int64
+	startRampTime int64
+	endRampTime   int64
+
+	sendTime    *util.Latency
+	receiveTime *util.Latency
+	totalTime   *util.Latency
+
 	msgTimeMap              map[string]*inflightTest
 	rampSummary             int64
 	totalSummary            int64
@@ -227,6 +234,9 @@ func New(config *conf.RunnerConfig) PerfRunner {
 		startTime:         startTime,
 		endTime:           endTime,
 		poolName:          poolName,
+		sendTime:          &util.Latency{},
+		receiveTime:       &util.Latency{},
+		totalTime:         &util.Latency{},
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:        make(map[string]*inflightTest),
@@ -505,6 +515,7 @@ perfLoop:
 	measuredActions := pr.totalSummary
 	measuredTime := time.Since(time.Unix(pr.startTime, 0)).Seconds()
 	measuredTps := pr.calculateCurrentTps(true)
+	measuredSendTps := pr.calculateSendTps()
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// After 30 seconds workers should be completed, so we check for delinquent messages
@@ -527,7 +538,11 @@ perfLoop:
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
 	log.Infof(" - Test duration (secs): %2f", measuredTime)
 	log.Infof(" - Measured actions: %d", measuredActions)
-	log.Infof(" - Measured actions/sec: %2f", measuredTps)
+	log.Infof(" - Measured send TPS: %2f", measuredSendTps)
+	log.Infof(" - Measured throughput: %2f", measuredTps)
+	log.Infof(" - Measured send duration: %s", pr.sendTime)
+	log.Infof(" - Measured event receiving duration: %s", pr.receiveTime)
+	log.Infof(" - Measured total duration: %s", pr.totalTime)
 
 	return nil
 }
@@ -765,9 +780,13 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				}
 				// if we've reached the expected amount of metadata calls then stop
 				if resultCount == tc.ActionsPerLoop() {
-					submissionSecondsPerLoop = time.Since(startTime).Seconds()
+					submissionDurationPerLoop := time.Since(startTime)
+					pr.sendTime.Record(submissionDurationPerLoop)
+					submissionSecondsPerLoop = submissionDurationPerLoop.Seconds()
 					sentTime = time.Now()
 					log.Infof("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, submissionSecondsPerLoop)
+
+					pr.endSendTime = time.Now().Unix()
 					break
 				}
 			}
@@ -800,8 +819,14 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					pr.stopTrackingRequest(nextTrackingID)
 				}
 			}
-			secondsPerLoop := time.Since(startTime).Seconds()
-			eventReceivingSecondsPerLoop = time.Since(sentTime).Seconds()
+			totalDurationPerLoop := time.Since(startTime)
+			pr.totalTime.Record(totalDurationPerLoop)
+			secondsPerLoop := totalDurationPerLoop.Seconds()
+
+			eventReceivingDurationPerLoop := time.Since(sentTime)
+			eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
+			pr.receiveTime.Record(totalDurationPerLoop)
+
 			total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
 			subPortion := int((submissionSecondsPerLoop / total) * 100)
 			envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
@@ -1015,13 +1040,13 @@ func (pr *perfRunner) detectDelinquentBalance() bool {
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Lock()
+	defer mutex.Unlock()
 	if len(trackingID) > 0 {
 		pr.msgTimeMap[trackingID] = &inflightTest{
 			testCase: tc,
 			time:     time.Now(),
 		}
 	}
-	mutex.Unlock()
 }
 
 func (pr *perfRunner) recordCompletedAction() {
@@ -1031,14 +1056,14 @@ func (pr *perfRunner) recordCompletedAction() {
 		pr.totalSummary++
 	}
 	mutex.Lock()
-	mutex.Unlock()
+	defer mutex.Unlock()
 	pr.calculateCurrentTps(true)
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
 	mutex.Lock()
+	defer mutex.Unlock()
 	delete(pr.msgTimeMap, trackingID)
-	mutex.Unlock()
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
@@ -1326,6 +1351,14 @@ func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
 		log.Infof("Current TPS: %v Measured Actions: %v Duration: %v", currentTps, measuredActions, duration)
 	}
 	return currentTps
+}
+func (pr *perfRunner) calculateSendTps() float64 {
+	measuredActions := pr.totalSummary
+	sendDuration := time.Duration((pr.endSendTime - pr.startTime) * int64(time.Second))
+	durationSec := sendDuration.Seconds()
+	sendTps := float64(measuredActions) / durationSec
+	log.Infof("Send TPS: %v Measured Actions: %v Duration: %v", sendTps, measuredActions, durationSec)
+	return sendTps
 }
 
 func (pr *perfRunner) ramping() bool {
