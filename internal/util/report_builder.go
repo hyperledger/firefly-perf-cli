@@ -36,7 +36,7 @@ type Latency struct {
 func (lt *Latency) Record(latency time.Duration) {
 	lt.mux.Lock()
 	defer lt.mux.Unlock()
-	if latency < lt.min {
+	if latency < lt.min || lt.min.Nanoseconds() == 0 {
 		lt.min = latency
 	}
 	if latency > lt.max {
