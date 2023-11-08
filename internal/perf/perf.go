@@ -775,7 +775,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				} else {
 					trackingIDs = append(trackingIDs, aResponse.trackingID)
 					pr.markTestInFlight(tc, aResponse.trackingID)
-					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, aResponse.trackingID)
+					log.Debugf("%d --> %s Sent %s: %s", workerID, testName, idType, aResponse.trackingID)
 					totalActionsCounter.Inc()
 				}
 				// if we've reached the expected amount of metadata calls then stop
@@ -784,7 +784,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					pr.sendTime.Record(submissionDurationPerLoop)
 					submissionSecondsPerLoop = submissionDurationPerLoop.Seconds()
 					sentTime = time.Now()
-					log.Infof("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, submissionSecondsPerLoop)
+					log.Debugf("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, submissionSecondsPerLoop)
 
 					pr.endSendTime = time.Now().Unix()
 					break
