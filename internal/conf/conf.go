@@ -81,7 +81,7 @@ type InstanceConfig struct {
 	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
 	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	SkipMintConfirmations     bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
+	SkipMintConfirmations     bool             `json:"skipMintConfirmations" yaml:"skipMintConfirmations"`
 	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 }
@@ -121,8 +121,8 @@ type TokenConfig struct {
 
 type ContractOptions struct {
 	Address   string `json:"address" yaml:"address"`
-	Channel   string `json:"channel" yaml:"channel"`
-	Chaincode string `json:"chaincode" yaml:"chaincode"`
+	Channel   string `json:"channel,omitempty" yaml:"channel,omitempty"`
+	Chaincode string `json:"chaincode,omitempty" yaml:"chaincode,omitempty"`
 }
 
 type FireFlyWsConfig struct {

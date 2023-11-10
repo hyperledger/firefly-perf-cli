@@ -156,21 +156,23 @@ type inflightTest struct {
 var mintStartingBalance int
 
 type perfRunner struct {
-	bfr           chan int
-	cfg           *conf.RunnerConfig
-	client        *resty.Client
-	ctx           context.Context
-	shutdown      context.CancelFunc
-	stopping      bool
+	bfr      chan int
+	cfg      *conf.RunnerConfig
+	client   *resty.Client
+	ctx      context.Context
+	shutdown context.CancelFunc
+	stopping bool
+
 	startTime     int64
 	endSendTime   int64
 	endTime       int64
 	startRampTime int64
 	endRampTime   int64
 
-	sendTime    *util.Latency
-	receiveTime *util.Latency
-	totalTime   *util.Latency
+	reportBuilder *util.Report
+	sendTime      *util.Latency
+	receiveTime   *util.Latency
+	totalTime     *util.Latency
 
 	msgTimeMap              map[string]*inflightTest
 	rampSummary             int64
@@ -196,7 +198,7 @@ type SubscriptionInfo struct {
 	Job     fftypes.FFEnum
 }
 
-func New(config *conf.RunnerConfig) PerfRunner {
+func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 	if config.LogLevel != "" {
 		if level, err := log.ParseLevel(config.LogLevel); err == nil {
 			log.SetLevel(level)
@@ -234,6 +236,7 @@ func New(config *conf.RunnerConfig) PerfRunner {
 		startTime:         startTime,
 		endTime:           endTime,
 		poolName:          poolName,
+		reportBuilder:     reportBuilder,
 		sendTime:          &util.Latency{},
 		receiveTime:       &util.Latency{},
 		totalTime:         &util.Latency{},
@@ -513,9 +516,23 @@ perfLoop:
 
 	pr.stopping = true
 	measuredActions := pr.totalSummary
-	measuredTime := time.Since(time.Unix(pr.startTime, 0)).Seconds()
-	measuredTps := pr.calculateCurrentTps(true)
-	measuredSendTps := pr.calculateSendTps()
+	measuredTime := time.Since(time.Unix(pr.startTime, 0))
+
+	testNames := make([]string, len(pr.cfg.Tests))
+	for i, t := range pr.cfg.Tests {
+		testNames[i] = t.Name.String()
+	}
+	testNameString := testNames[0]
+	if len(testNames) > 1 {
+		testNameString = strings.Join(testNames[:], ",")
+	}
+	tps := util.GenerateTPS(measuredActions, pr.startTime, pr.endSendTime)
+	pr.reportBuilder.AddTestRunMetrics(testNameString, measuredActions, measuredTime, tps, pr.totalTime)
+	err = pr.reportBuilder.GenerateHTML()
+
+	if err != nil {
+		log.Errorf("failed to generate performance report: %+v", err)
+	}
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// After 30 seconds workers should be completed, so we check for delinquent messages
@@ -536,10 +553,10 @@ perfLoop:
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric delinquent_msgs_total    = %f\n", getMetricVal(delinquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %2f", measuredTime)
+	log.Infof(" - Test duration: %s", measuredTime)
 	log.Infof(" - Measured actions: %d", measuredActions)
-	log.Infof(" - Measured send TPS: %2f", measuredSendTps)
-	log.Infof(" - Measured throughput: %2f", measuredTps)
+	log.Infof(" - Measured send TPS: %2f", tps.SendRate)
+	log.Infof(" - Measured throughput: %2f", tps.Throughput)
 	log.Infof(" - Measured send duration: %s", pr.sendTime)
 	log.Infof(" - Measured event receiving duration: %s", pr.receiveTime)
 	log.Infof(" - Measured total duration: %s", pr.totalTime)
@@ -1351,14 +1368,6 @@ func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
 		log.Infof("Current TPS: %v Measured Actions: %v Duration: %v", currentTps, measuredActions, duration)
 	}
 	return currentTps
-}
-func (pr *perfRunner) calculateSendTps() float64 {
-	measuredActions := pr.totalSummary
-	sendDuration := time.Duration((pr.endSendTime - pr.startTime) * int64(time.Second))
-	durationSec := sendDuration.Seconds()
-	sendTps := float64(measuredActions) / durationSec
-	log.Infof("Send TPS: %v Measured Actions: %v Duration: %v", sendTps, measuredActions, durationSec)
-	return sendTps
 }
 
 func (pr *perfRunner) ramping() bool {
