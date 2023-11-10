@@ -516,7 +516,7 @@ perfLoop:
 
 	pr.stopping = true
 	measuredActions := pr.totalSummary
-	measuredTime := time.Since(time.Unix(pr.startTime, 0)).Seconds()
+	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
 	testNames := make([]string, len(pr.cfg.Tests))
 	for _, t := range pr.cfg.Tests {
@@ -553,7 +553,7 @@ perfLoop:
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric delinquent_msgs_total    = %f\n", getMetricVal(delinquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %2f", measuredTime)
+	log.Infof(" - Test duration: %s", measuredTime)
 	log.Infof(" - Measured actions: %d", measuredActions)
 	log.Infof(" - Measured send TPS: %2f", tps.SendRate)
 	log.Infof(" - Measured throughput: %2f", tps.Throughput)

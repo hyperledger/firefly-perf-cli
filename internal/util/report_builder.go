@@ -118,7 +118,7 @@ func (r *Report) GenerateHTML() error {
             <table style="min-width: 100%;">
                 <tr>
                     <th>Test name</th>
-                    <th>Test duration (secs)</th>
+                    <th>Test duration</th>
                     <th>Actions</th>
                     <th>Send TPS</th>
                     <th>Min Latency</th>
@@ -166,11 +166,11 @@ func (r *Report) GenerateHTML() error {
 	return nil
 }
 
-func (r *Report) AddTestRunMetrics(name string, totalActions int64, duration float64, tps *TPS, lt *Latency) {
+func (r *Report) AddTestRunMetrics(name string, totalActions int64, duration time.Duration, tps *TPS, lt *Latency) {
 	r.TestRuns = append(r.TestRuns, TestRunMetrics{
 		Name:         name,
 		TotalActions: fmt.Sprintf("%d", totalActions),
-		Duration:     fmt.Sprintf("%f", duration),
+		Duration:     fmt.Sprintf("%s", duration),
 		SendRate:     fmt.Sprintf("%f", tps.SendRate),
 		Throughput:   fmt.Sprintf("%f", tps.Throughput),
 		MinLatency:   lt.Min().String(),
