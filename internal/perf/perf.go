@@ -519,8 +519,8 @@ perfLoop:
 	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
 	testNames := make([]string, len(pr.cfg.Tests))
-	for _, t := range pr.cfg.Tests {
-		testNames = append(testNames, t.Name.String())
+	for i, t := range pr.cfg.Tests {
+		testNames[i] = t.Name.String()
 	}
 	testNameString := testNames[0]
 	if len(testNames) > 1 {
