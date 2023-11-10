@@ -2,6 +2,7 @@ main
 .DS_Store
 ffperf/ffperf
 ff-perf.log
+ffperf-report.html
 .vscode
 dist/
 *.iml

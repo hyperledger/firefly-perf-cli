@@ -28,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/hyperledger/firefly-perf-cli/internal/server"
 	"github.com/hyperledger/firefly-perf-cli/internal/types"
+	"github.com/hyperledger/firefly-perf-cli/internal/util"
 	"github.com/hyperledger/firefly/pkg/core"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -65,17 +66,22 @@ Executes a instance within a performance test suite to generate synthetic load a
 			log.Warn("both the \"instance-name\" and \"instance-index\" flags were provided, using \"instance-name\"")
 		}
 
-		instance, err := selectInstance(config)
+		instanceConfig, err := selectInstance(config)
 		if err != nil {
 			return err
 		}
 
-		runnerConfig, err := generateRunnerConfigFromInstance(instance, config)
+		runnerConfig, err := generateRunnerConfigFromInstance(instanceConfig, config)
 		if err != nil {
 			return err
 		}
 
-		perfRunner = perf.New(runnerConfig)
+		configYaml, err := yaml.Marshal(instanceConfig)
+		if err != nil {
+			return err
+		}
+
+		perfRunner = perf.New(runnerConfig, util.NewReportForTestInstance(string(configYaml), instanceName))
 		httpServer = server.NewHttpServer()
 
 		return nil
