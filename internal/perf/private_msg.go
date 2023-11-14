@@ -32,7 +32,7 @@ func (tc *private) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *private) RunOnce() (string, error) {
+func (tc *private) RunOnce(iterationCount int) (string, error) {
 
 	payload := fmt.Sprintf(`{
 		"data": [

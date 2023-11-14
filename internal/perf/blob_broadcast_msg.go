@@ -33,7 +33,7 @@ func (tc *blobBroadcast) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *blobBroadcast) RunOnce() (string, error) {
+func (tc *blobBroadcast) RunOnce(iterationCount int) (string, error) {
 
 	blob, hash := tc.generateBlob(big.NewInt(1024))
 	dataID, err := tc.uploadBlob(blob, hash, tc.pr.client.BaseURL)

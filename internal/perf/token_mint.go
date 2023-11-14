@@ -60,7 +60,7 @@ func (tc *tokenMint) GetSigningKey() string {
 	return ""
 }
 
-func (tc *tokenMint) RunOnce() (string, error) {
+func (tc *tokenMint) RunOnce(iterationCount int) (string, error) {
 	var payload string
 	mintAmount := 10
 	if tc.pr.cfg.TokenOptions.TokenType == core.TokenTypeNonFungible.String() {

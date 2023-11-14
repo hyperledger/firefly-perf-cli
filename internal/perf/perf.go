@@ -36,6 +36,7 @@ import (
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
+	"github.com/hyperledger/firefly-perf-cli/internal/util"
 	"github.com/hyperledger/firefly/pkg/core"
 	dto "github.com/prometheus/client_model/go"
 	log "github.com/sirupsen/logrus"
@@ -116,7 +117,7 @@ func getMetricVal(collector prometheus.Collector) float64 {
 	metric := dto.Metric{}
 	err := (<-collectorChannel).Write(&metric)
 	if err != nil {
-		log.Error("Error writing metric: %s", err)
+		log.Error("error writing metric: %s", err)
 	}
 	if metric.Counter != nil {
 		return *metric.Counter.Value
@@ -141,7 +142,7 @@ const (
 
 type TestCase interface {
 	WorkerID() int
-	RunOnce() (trackingID string, err error)
+	RunOnce(iterationCount int) (trackingID string, err error)
 	IDType() TrackingIDType
 	Name() string
 	ActionsPerLoop() int
@@ -155,16 +156,24 @@ type inflightTest struct {
 var mintStartingBalance int
 
 type perfRunner struct {
-	bfr                     chan int
-	cfg                     *conf.RunnerConfig
-	client                  *resty.Client
-	ctx                     context.Context
-	shutdown                context.CancelFunc
-	stopping                bool
-	startTime               int64
-	endTime                 int64
-	startRampTime           int64
-	endRampTime             int64
+	bfr      chan int
+	cfg      *conf.RunnerConfig
+	client   *resty.Client
+	ctx      context.Context
+	shutdown context.CancelFunc
+	stopping bool
+
+	startTime     int64
+	endSendTime   int64
+	endTime       int64
+	startRampTime int64
+	endRampTime   int64
+
+	reportBuilder *util.Report
+	sendTime      *util.Latency
+	receiveTime   *util.Latency
+	totalTime     *util.Latency
+
 	msgTimeMap              map[string]*inflightTest
 	rampSummary             int64
 	totalSummary            int64
@@ -189,7 +198,7 @@ type SubscriptionInfo struct {
 	Job     fftypes.FFEnum
 }
 
-func New(config *conf.RunnerConfig) PerfRunner {
+func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 	if config.LogLevel != "" {
 		if level, err := log.ParseLevel(config.LogLevel); err == nil {
 			log.SetLevel(level)
@@ -227,6 +236,10 @@ func New(config *conf.RunnerConfig) PerfRunner {
 		startTime:         startTime,
 		endTime:           endTime,
 		poolName:          poolName,
+		reportBuilder:     reportBuilder,
+		sendTime:          &util.Latency{},
+		receiveTime:       &util.Latency{},
+		totalTime:         &util.Latency{},
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:        make(map[string]*inflightTest),
@@ -434,7 +447,7 @@ func (pr *perfRunner) Start() (err error) {
 			case conf.PerfTestBlobPrivateMsg:
 				tc = newBlobPrivateTestWorker(pr, id, test.ActionsPerLoop)
 			default:
-				return fmt.Errorf("Unknown test case '%s'", test.Name)
+				return fmt.Errorf("unknown test case '%s'", test.Name)
 			}
 
 			delayPerWorker := pr.cfg.RampLength / time.Duration(test.Workers)
@@ -497,14 +510,29 @@ perfLoop:
 	// If configured, check that the balance of the mint recipient address is correct
 	if pr.detectDelinquentBalance() {
 		if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-			log.Panic(fmt.Errorf("Token mint recipient balance didn't reach the expected value in the allowed time"))
+			log.Panic(fmt.Errorf("token mint recipient balance didn't reach the expected value in the allowed time"))
 		}
 	}
 
 	pr.stopping = true
 	measuredActions := pr.totalSummary
-	measuredTime := time.Since(time.Unix(pr.startTime, 0)).Seconds()
-	measuredTps := pr.calculateCurrentTps(true)
+	measuredTime := time.Since(time.Unix(pr.startTime, 0))
+
+	testNames := make([]string, len(pr.cfg.Tests))
+	for i, t := range pr.cfg.Tests {
+		testNames[i] = t.Name.String()
+	}
+	testNameString := testNames[0]
+	if len(testNames) > 1 {
+		testNameString = strings.Join(testNames[:], ",")
+	}
+	tps := util.GenerateTPS(measuredActions, pr.startTime, pr.endSendTime)
+	pr.reportBuilder.AddTestRunMetrics(testNameString, measuredActions, measuredTime, tps, pr.totalTime)
+	err = pr.reportBuilder.GenerateHTML()
+
+	if err != nil {
+		log.Errorf("failed to generate performance report: %+v", err)
+	}
 
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// After 30 seconds workers should be completed, so we check for delinquent messages
@@ -525,9 +553,13 @@ perfLoop:
 	log.Infof(" - Prometheus metric incomplete_events_total = %f\n", getMetricVal(incompleteEventsCounter))
 	log.Infof(" - Prometheus metric delinquent_msgs_total    = %f\n", getMetricVal(delinquentMsgsCounter))
 	log.Infof(" - Prometheus metric actions_submitted_total = %f\n", getMetricVal(totalActionsCounter))
-	log.Infof(" - Test duration (secs): %2f", measuredTime)
+	log.Infof(" - Test duration: %s", measuredTime)
 	log.Infof(" - Measured actions: %d", measuredActions)
-	log.Infof(" - Measured actions/sec: %2f", measuredTps)
+	log.Infof(" - Measured send TPS: %2f", tps.SendRate)
+	log.Infof(" - Measured throughput: %2f", tps.Throughput)
+	log.Infof(" - Measured send duration: %s", pr.sendTime)
+	log.Infof(" - Measured event receiving duration: %s", pr.receiveTime)
+	log.Infof(" - Measured total duration: %s", pr.totalTime)
 
 	return nil
 }
@@ -618,14 +650,14 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 							log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
 						}
 					} else {
-						log.Errorf("No URI in token transfer event: %s")
+						log.Errorf("no URI in token transfer event: %s")
 						b, _ := json.Marshal(&event)
 						log.Errorf("Full event: %s", b)
 
 						incompleteEventsCounter.Inc()
 
 						if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-							log.Panic(fmt.Errorf("Error - no URI found in token_transfer_confirmed event"))
+							log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
 						}
 					}
 				}
@@ -719,6 +751,17 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			}
 
 			startTime := time.Now()
+
+			type ActionResponse struct {
+				trackingID string
+				err        error
+			}
+
+			actionResponses := make(chan *ActionResponse, tc.ActionsPerLoop())
+
+			var sentTime time.Time
+			var submissionSecondsPerLoop float64
+			var eventReceivingSecondsPerLoop float64
 			trackingIDs := make([]string, 0)
 
 			for actionsCompleted = 0; actionsCompleted < tc.ActionsPerLoop(); actionsCompleted++ {
@@ -726,25 +769,44 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				if pr.allActionsComplete() {
 					break
 				}
-
-				trackingID, err := tc.RunOnce()
-
-				if err != nil {
+				actionCount := actionsCompleted
+				go func() {
+					trackingID, err := tc.RunOnce(actionCount)
+					log.Debugf("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
+					actionResponses <- &ActionResponse{
+						trackingID: trackingID,
+						err:        err,
+					}
+				}()
+			}
+			resultCount := 0
+			for {
+				aResponse := <-actionResponses
+				resultCount++
+				if aResponse.err != nil {
 					if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-						return err
+						return aResponse.err
 					} else {
-						log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, err)
-						err = nil
-						continue
+						log.Errorf("Worker %d error running job (logging but continuing): %s", workerID, aResponse.err)
 					}
 				} else {
-					trackingIDs = append(trackingIDs, trackingID)
-					pr.markTestInFlight(tc, trackingID)
-					log.Infof("%d --> %s Sent %s: %s", workerID, testName, idType, trackingID)
+					trackingIDs = append(trackingIDs, aResponse.trackingID)
+					pr.markTestInFlight(tc, aResponse.trackingID)
+					log.Debugf("%d --> %s Sent %s: %s", workerID, testName, idType, aResponse.trackingID)
 					totalActionsCounter.Inc()
 				}
-			}
+				// if we've reached the expected amount of metadata calls then stop
+				if resultCount == tc.ActionsPerLoop() {
+					submissionDurationPerLoop := time.Since(startTime)
+					pr.sendTime.Record(submissionDurationPerLoop)
+					submissionSecondsPerLoop = submissionDurationPerLoop.Seconds()
+					sentTime = time.Now()
+					log.Debugf("%d --> %s All actions sent %d after %f seconds", workerID, testName, resultCount, submissionSecondsPerLoop)
 
+					pr.endSendTime = time.Now().Unix()
+					break
+				}
+			}
 			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
 				// For minting tests a worker can (if configured) skip waiting for a matching response event
 				// before making itself available for the next job
@@ -774,10 +836,23 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					pr.stopTrackingRequest(nextTrackingID)
 				}
 			}
-			log.Infof("%d <-- %s Finished (loop=%d)", workerID, testName, loop)
+			totalDurationPerLoop := time.Since(startTime)
+			pr.totalTime.Record(totalDurationPerLoop)
+			secondsPerLoop := totalDurationPerLoop.Seconds()
+
+			eventReceivingDurationPerLoop := time.Since(sentTime)
+			eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
+			pr.receiveTime.Record(totalDurationPerLoop)
+
+			total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
+			subPortion := int((submissionSecondsPerLoop / total) * 100)
+			envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
+			log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
 
 			if histErr == nil {
-				hist.Observe(time.Since(startTime).Seconds())
+				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
+
+				hist.Observe(secondsPerLoop)
 			}
 			loop++
 
@@ -982,13 +1057,13 @@ func (pr *perfRunner) detectDelinquentBalance() bool {
 
 func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Lock()
+	defer mutex.Unlock()
 	if len(trackingID) > 0 {
 		pr.msgTimeMap[trackingID] = &inflightTest{
 			testCase: tc,
 			time:     time.Now(),
 		}
 	}
-	mutex.Unlock()
 }
 
 func (pr *perfRunner) recordCompletedAction() {
@@ -998,14 +1073,14 @@ func (pr *perfRunner) recordCompletedAction() {
 		pr.totalSummary++
 	}
 	mutex.Lock()
-	mutex.Unlock()
+	defer mutex.Unlock()
 	pr.calculateCurrentTps(true)
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
 	mutex.Lock()
+	defer mutex.Unlock()
 	delete(pr.msgTimeMap, trackingID)
-	mutex.Unlock()
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
@@ -1062,7 +1137,7 @@ func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, er
 		return "", err
 	}
 	if res.IsError() {
-		return "", fmt.Errorf("Failed: %s", errResponse)
+		return "", fmt.Errorf("failed: %s", errResponse)
 	}
 	id := responseBody["id"].(string)
 	log.Infof("Created contract listener on %s: %s", nodeURL, id)
@@ -1257,7 +1332,7 @@ func (pr *perfRunner) getMintRecipientBalance() (int, error) {
 		SetError(&resError).
 		Get(fullPath)
 	if err != nil || res.IsError() {
-		return 0, fmt.Errorf("Error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
+		return 0, fmt.Errorf("error querying token balance [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
 
 	return response.Total, nil
@@ -1272,7 +1347,7 @@ func (pr *perfRunner) getIdempotencyKey(workerId int, iteration int) string {
 	workerIdStr := fmt.Sprintf("%05d", workerId)
 	// Left pad iteration ID to 9 digits (supporting up to 999,999,999 iterations)
 	iterationIdStr := fmt.Sprintf("%09d", iteration)
-	return fmt.Sprintf("%v-%s-%s", pr.startTime, workerIdStr, iterationIdStr)
+	return fmt.Sprintf("%v-%s-%s-%s", pr.startTime, workerIdStr, iterationIdStr, fftypes.NewUUID())
 }
 
 func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
