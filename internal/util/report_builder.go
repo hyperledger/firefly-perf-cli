@@ -28,122 +28,194 @@ type Report struct {
 
 func (r *Report) GenerateHTML() error {
 	htmlTemplate := `<!DOCTYPE html>
-<html lang="en">
+    <html lang="en">
+    
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Firefly: Performance Report</title>
+        <style>
+            html,
+            body {
+                height: 100%;
+            }
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HyperLedger Firefly Performance Report</title>
-    <style>
-        table {
-            font-size: 11px;
-            color: #333333;
-            border-width: 1px;
-            border-color: #666666;
-            border-collapse: collapse;
-            margin-bottom: 10px;
-        }
+            .main {
+                background: #fff;
+                display: flex;
+                height: 100%;
+            }
 
+            .sidebar {
+                background: #fafafa;
+                border-right: 1px solid #e0e0e0;
+                min-height: 100%;
+                padding: 30px;
+                margin-right: 30px;
+                width: 260px;
+            }
 
-        th {
-            border-width: 1px;
-            font-size: small;
-            padding: 8px;
-            border-style: solid;
-            border-color: #666666;
-            background-color: #f2f2f2;
-        }
+            .sidebar-logo {
+                display: block;
+                height: auto;
+                margin: 0 auto 20px auto;
+                width: 160px;
+            }
 
-        td {
-            border-width: 1px;
-            font-size: small;
-            padding: 8px;
-            border-style: solid;
-            border-color: #666666;
-            background-color: #ffffff;
-            font-weight: 400;
-        }
+            .sidebar-list {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+            }
 
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+            .sidebar-list-item {
+                margin: 10px 0;
+            }
 
-        section {
-            margin-bottom: 30px;
-        }
+            .sidebar-list-item-link {
+                color: #000;
+                text-decoration: none;
+            }
 
-        h2 {
-            font-size: 1.2em;
-            margin-bottom: 10px;
-        }
+            .sidebar-list-item-link:hover {
+                color: #462de0;
+            }
 
-        h3 {
-            font-size: 1.1em;
-            margin-bottom: 5px;
-        }
+            .sidebar-sublist {
+                border-left: 1px solid #e0e0e0;
+                font-size: 13px;
+                list-style: none;
+                margin: 10px 0 0 0;
+                padding: 0 0 0 10px;
+            }
 
-        code {
-            display: block;
-            padding: 10px;
-            background-color: #f4f4f4;
-            border: 1px solid #ccc;
-            font-size: 0.9em;
-        }
-    </style>
-</head>
+            .sidebar-sublist-item {
+                margin: 5px 0;
+            }
 
-<body>
-    <div class="navbar">
-        <img src="https://www.hyperledger.org/hubfs/hyperledger-firefly_color.png" loading="lazy" alt="Firefly"
-            height="40" class="header-brand-image">
-    </div>
-    <section>
-        <h2>Test runner configuration</h2>
-        <code>
-            <pre>
-{{.RunnerConfig}}
-            </pre>
-        </code>
-    </section>
+            .sidebar-sublist-item-link {
+                color: #000;
+                text-decoration: none;
+            }
 
-    <section>
-        <h2>Test metrics</h2>
-        <p>
-            <b>Test instance:</b>{{.TestInstanceName}}
-        </p>
-        <div>
-            <table style="min-width: 100%;">
-                <tr>
-                    <th>Test name</th>
-                    <th>Test duration</th>
-                    <th>Actions</th>
-                    <th>Send TPS</th>
-                    <th>Min Latency</th>
-                    <th>Max Latency</th>
-                    <th>Avg Latency</th>
-                    <th>Throughput</th>
-                </tr>
-                {{range .TestRuns}}
-                <tr>
-                    <td>{{.Name}}</td>
-                    <td>{{.TotalActions}}</td>
-                    <td>{{.Duration}}</td>
-                    <td>{{.SendRate}}</td>
-                    <td>{{.MinLatency}}</td>
-                    <td>{{.MaxLatency}}</td>
-                    <td>{{.AvgLatency}}</td>
-                    <td>{{.Throughput}}</td>
-                </tr>
-                {{end}}
-            </table>
-        </div>
-    </section>
-</body>
+            .sidebar-sublist-item-link:hover {
+                color: #462de0;
+            }
 
-</html>`
+            .content {
+                box-sizing: border-box;
+                padding-right: 30px;
+                width: 80%;
+            }
+
+            table {
+                font-size: 11px;
+                color: #333333;
+                border-width: 1px;
+                border-color: #666666;
+                border-collapse: collapse;
+                margin-bottom: 10px;
+                min-width: 100%;
+            }
+
+            th {
+                border-width: 1px;
+                font-size: small;
+                padding: 8px;
+                border-style: solid;
+                border-color: #666666;
+                background-color: #f2f2f2;
+            }
+
+            td {
+                border-width: 1px;
+                font-size: small;
+                padding: 8px;
+                border-style: solid;
+                border-color: #666666;
+                background-color: #ffffff;
+                font-weight: 400;
+                text-align: center;
+            }
+
+            body {
+                font: 15px/20px Helvetica, Arial, sans-serif;
+                margin: 0;
+            }
+
+            code {
+                display: block;
+                padding: 10px;
+                background-color: #f4f4f4;
+                border: 1px solid #ccc;
+                font-size: 0.9em;
+            }
+        </style>
+    </head>
+    
+    <body>
+        <section class="main">
+            <aside class="sidebar">
+                <img class="sidebar-logo" src="https://www.hyperledger.org/hubfs/hyperledger-firefly_color.png"
+                    loading="lazy" alt="Firefly" height="40" class="header-brand-image">
+                <ul class="sidebar-list">
+                    <li class="sidebar-list-item">
+                        <a class="sidebar-list-item-link" href="#test-configuration">
+                            Test Instance Configuration
+                        </a>
+                    </li>
+                    <li class="sidebar-list-item">
+                        <a class="sidebar-list-item-link" href="#test-metrics">
+                            Test Metrics
+                        </a>
+                    </li>
+                </ul>
+            </aside>
+            <main class="content">
+                <h1>Firefly Performance Report</h1>
+                <p>Version: v0.1.0</p>
+                <p>Test instance name: {{.TestInstanceName}}</p>
+                <section id="test-configuration">
+                    <h2>Test Instance Configuration</h2>
+                    <code>
+                    <pre>{{.RunnerConfig}}</pre>
+                </code>
+                </section>
+    
+                <section id="test-metrics">
+                    <h2>Test Metrics</h2>
+                    <div>
+                        <table>
+                            <tr>
+                                <th>Test name</th>
+                                <th>Test duration (secs)</th>
+                                <th>Actions</th>
+                                <th>Send TPS</th>
+                                <th>Min Latency</th>
+                                <th>Max Latency</th>
+                                <th>Avg Latency</th>
+                                <th>Throughput</th>
+                            </tr>
+                            {{range .TestRuns}}
+                            <tr>
+                                <td>{{.Name}}</td>
+                                <td>{{.Duration}}</td>
+                                <td>{{.TotalActions}}</td>
+                                <td>{{.SendRate}}</td>
+                                <td>{{.MinLatency}}</td>
+                                <td>{{.MaxLatency}}</td>
+                                <td>{{.AvgLatency}}</td>
+                                <td>{{.Throughput}}</td>
+                            </tr>
+                            {{end}}
+                        </table>
+                    </div>
+                </section>
+            </main>
+        </section>
+    </body>
+    
+    </html>`
 	// Execute the template
 	tmpl, err := template.New("template").Parse(htmlTemplate)
 	if err != nil {
