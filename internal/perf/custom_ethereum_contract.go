@@ -81,8 +81,9 @@ func (tc *customEthereum) RunOnce(iterationCount int) (string, error) {
 		"input": {
 			"newValue": %v
 		},
+		"key": "%s",
 		"idempotencyKey": "%s"%s
-	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey, invokeOptionsJSON)
+	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
 	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "contracts/invoke")
