@@ -867,7 +867,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			secondsPerLoop := totalDurationPerLoop.Seconds()
 
 			if pr.cfg.NoWaitSubmission {
-				log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, secondsPerLoop)
+				log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
 
 			} else {
 				eventReceivingDurationPerLoop := time.Since(sentTime)
