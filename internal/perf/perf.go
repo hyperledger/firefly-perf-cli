@@ -515,6 +515,29 @@ perfLoop:
 	}
 
 	pr.stopping = true
+
+	tallyStart := time.Now()
+
+	for {
+		eventsCount := getMetricVal(receivedEventsCounter)
+		submissionCount := getMetricVal(receivedEventsCounter)
+		if eventsCount == submissionCount {
+			break
+		} else if eventsCount > submissionCount {
+			log.Warnf("The number of events received %f is greater than the number of requests sent %f.", eventsCount, submissionCount)
+			break
+		}
+
+		// Check if more than 1 minute has passed
+		if time.Since(tallyStart) > 30*time.Second {
+			log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
+			break
+		}
+
+		// Add a sleep to avoid a tight loop, but no too much that will influence the TPS
+		time.Sleep(time.Millisecond * 100)
+	}
+
 	measuredActions := pr.totalSummary
 	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
@@ -709,7 +732,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			wsconn.Send(context.Background(), ackJSON)
 			pr.recordCompletedAction()
 			// Release worker so it can continue to its next task
-			if !pr.stopping && !pr.cfg.SkipMintConfirmations {
+			if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
 					pr.wsReceivers[workerID] <- nodeURL
 				}
@@ -807,7 +830,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					break
 				}
 			}
-			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
+			if pr.cfg.NoWaitSubmission || (testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations) {
 				// For minting tests a worker can (if configured) skip waiting for a matching response event
 				// before making itself available for the next job
 				confirmationsPerAction = 0
