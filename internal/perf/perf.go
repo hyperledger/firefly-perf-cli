@@ -518,24 +518,27 @@ perfLoop:
 
 	tallyStart := time.Now()
 
-	for {
+	if pr.cfg.NoWaitSubmission {
 		eventsCount := getMetricVal(receivedEventsCounter)
-		submissionCount := getMetricVal(receivedEventsCounter)
-		if eventsCount == submissionCount {
-			break
-		} else if eventsCount > submissionCount {
-			log.Warnf("The number of events received %f is greater than the number of requests sent %f.", eventsCount, submissionCount)
-			break
-		}
+		submissionCount := getMetricVal(totalActionsCounter)
+		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 30s", eventsCount, submissionCount)
+		for {
+			if eventsCount == submissionCount {
+				break
+			} else if eventsCount > submissionCount {
+				log.Warnf("The number of events received %f is greater than the number of requests sent %f.", eventsCount, submissionCount)
+				break
+			}
 
-		// Check if more than 1 minute has passed
-		if time.Since(tallyStart) > 30*time.Second {
-			log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
-			break
-		}
+			// Check if more than 1 minute has passed
+			if time.Since(tallyStart) > 30*time.Second {
+				log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
+				break
+			}
 
-		// Add a sleep to avoid a tight loop, but no too much that will influence the TPS
-		time.Sleep(time.Millisecond * 100)
+			time.Sleep(time.Second * 1)
+			log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f", eventsCount, submissionCount)
+		}
 	}
 
 	measuredActions := pr.totalSummary
