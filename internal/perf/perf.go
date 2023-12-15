@@ -866,14 +866,19 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			pr.totalTime.Record(totalDurationPerLoop)
 			secondsPerLoop := totalDurationPerLoop.Seconds()
 
-			eventReceivingDurationPerLoop := time.Since(sentTime)
-			eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
-			pr.receiveTime.Record(totalDurationPerLoop)
+			if pr.cfg.NoWaitSubmission {
+				log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, secondsPerLoop)
 
-			total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
-			subPortion := int((submissionSecondsPerLoop / total) * 100)
-			envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
-			log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
+			} else {
+				eventReceivingDurationPerLoop := time.Since(sentTime)
+				eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
+				pr.receiveTime.Record(totalDurationPerLoop)
+
+				total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
+				subPortion := int((submissionSecondsPerLoop / total) * 100)
+				envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
+				log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
+			}
 
 			if histErr == nil {
 				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
