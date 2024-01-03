@@ -271,7 +271,11 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 
 func (pr *perfRunner) Init() (err error) {
 	pr.client = getFFClient(pr.sender)
-	pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
+	if pr.cfg.WebSocket.AuthToken != "" {
+		pr.client.Header.Set("Authorization", fmt.Sprintf("Bearer %s", pr.cfg.WebSocket.AuthToken))
+	} else {
+		pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
+	}
 	// Set request retry with backoff
 	pr.client.
 		SetRetryCount(10).

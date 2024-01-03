@@ -170,9 +170,11 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		if perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername != "" {
 			runnerConfig.WebSocket.AuthUsername = perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername
 		}
-
 		if perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword != "" {
 			runnerConfig.WebSocket.AuthPassword = perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword
+		}
+		if perfConfig.Nodes[instance.ManualNodeIndex].AuthToken != "" {
+			runnerConfig.WebSocket.AuthToken = perfConfig.Nodes[instance.ManualNodeIndex].AuthToken
 		}
 	} else {
 		// Read endpoint information from the stack JSON
