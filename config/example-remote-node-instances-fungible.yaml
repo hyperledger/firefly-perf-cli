@@ -21,7 +21,7 @@ instances:
         workers: 4
     fireflyNamespace: default
     maxTimePerAction: 300s
-    NoWaitSubmission: true
+    noWaitSubmission: true
     rampLength: 60m
     tokenOptions:
       tokenType: nonfungible

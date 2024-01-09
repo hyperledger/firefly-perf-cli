@@ -69,7 +69,7 @@ instances:
     apiPrefix: ${REMOTE_ENDPOINT_API_PREFIX}
     signingAddress: ${SIGNING_KEY}
     maxTimePerAction: 60s
-    NoWaitSubmission: true
+    noWaitSubmission: true
     delinquentAction: log
     length: 500h
     tokenOptions:
