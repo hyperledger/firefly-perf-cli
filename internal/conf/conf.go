@@ -18,6 +18,7 @@ package conf
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -97,6 +98,7 @@ type NodeConfig struct {
 	APIEndpoint  string `json:"apiEndpoint,omitempty" yaml:"apiEndpoint,omitempty"`
 	AuthUsername string `json:"authUsername,omitempty" yaml:"authUsername,omitempty"`
 	AuthPassword string `json:"authPassword,omitempty" yaml:"authPassword,omitempty"`
+	AuthToken    string `json:"authToken,omitempty" yaml:"authToken,omitempty"`
 }
 
 type MessageOptions struct {
@@ -135,6 +137,7 @@ type FireFlyWsConfig struct {
 	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
 	AuthUsername           string        `mapstructure:"authUsername" json:"authUsername" yaml:"authUsername"`
 	AuthPassword           string        `mapstructure:"authPassword" json:"authPassword" yaml:"authPassword"`
+	AuthToken              string        `mapstructure:"authToken" json:"authToken" yaml:"authToken"`
 	DisableTLSVerification bool          `mapstructure:"disableTLSVerification" json:"disableTLSVerification" yaml:"disableTLSVerification"`
 	ConnectionTimeout      time.Duration `mapstructure:"connectionTimeout" json:"connectionTimeout" yaml:"connectionTimeout"`
 }
@@ -142,7 +145,7 @@ type FireFlyWsConfig struct {
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig {
 	t, _ := url.QueryUnescape(conf.WSPath)
 
-	return &wsclient.WSConfig{
+	wsConfig := wsclient.WSConfig{
 		HTTPURL:                nodeURL,
 		WSKeyPath:              t,
 		ReadBufferSize:         conf.ReadBufferSize,
@@ -151,13 +154,22 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig 
 		MaximumDelay:           conf.MaximumDelay,
 		InitialConnectAttempts: conf.InitialConnectAttempts,
 		HeartbeatInterval:      conf.HeartbeatInterval,
-		AuthUsername:           conf.AuthUsername,
-		AuthPassword:           conf.AuthPassword,
 		ConnectionTimeout:      conf.ConnectionTimeout,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: conf.DisableTLSVerification,
 		},
 	}
+
+	if conf.AuthToken != "" {
+		wsConfig.HTTPHeaders = fftypes.JSONObject{
+			"Authorization": fmt.Sprintf("Bearer %s", conf.AuthToken),
+		}
+	} else {
+		wsConfig.AuthUsername = conf.AuthUsername
+		wsConfig.AuthPassword = conf.AuthPassword
+	}
+
+	return &wsConfig
 }
 
 var (

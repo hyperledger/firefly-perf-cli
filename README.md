@@ -65,6 +65,13 @@ Currently the types of test that can be run against a remote node are limited to
 it most suitable for test types `token_mint`, `custom_ethereum_contract` and `custom_fabric_contract` since these don't need
 responses to be received from other members of the FireFly network.
 
+To provide authentication when authenticating against a node endpoint, you can provide either of the following credentials in the `instances.yaml` under each `node` entry:
+
+- bearer token - set the access token as the `authToken` value
+- basic auth - set the username and password as the `authUsername` and `authPassword` values
+
+> `authToken` takes precedence over `authUsername` and `authPassword` values
+
 As a result, running the CLI consists of providing an `instances.yaml` file describe the test configuration
 and an instance index or name indicating which instance the process should run:
 
