@@ -215,6 +215,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	// Common configuration regardless of running with manually defined nodes or a local stack
 	runnerConfig.LogLevel = perfConfig.LogLevel
 	runnerConfig.SkipMintConfirmations = instance.SkipMintConfirmations
+	runnerConfig.NoWaitSubmission = instance.NoWaitSubmission
 	runnerConfig.Length = instance.Length
 	runnerConfig.Daemon = perfConfig.Daemon
 	runnerConfig.LogEvents = perfConfig.LogEvents

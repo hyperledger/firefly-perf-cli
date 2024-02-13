@@ -519,6 +519,32 @@ perfLoop:
 	}
 
 	pr.stopping = true
+
+	tallyStart := time.Now()
+
+	if pr.cfg.NoWaitSubmission {
+		eventsCount := getMetricVal(receivedEventsCounter)
+		submissionCount := getMetricVal(totalActionsCounter)
+		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 30s", eventsCount, submissionCount)
+		for {
+			if eventsCount == submissionCount {
+				break
+			} else if eventsCount > submissionCount {
+				log.Warnf("The number of events received %f is greater than the number of requests sent %f.", eventsCount, submissionCount)
+				break
+			}
+
+			// Check if more than 1 minute has passed
+			if time.Since(tallyStart) > 30*time.Second {
+				log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
+				break
+			}
+
+			time.Sleep(time.Second * 1)
+			log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f", eventsCount, submissionCount)
+		}
+	}
+
 	measuredActions := pr.totalSummary
 	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
@@ -713,7 +739,7 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			wsconn.Send(context.Background(), ackJSON)
 			pr.recordCompletedAction()
 			// Release worker so it can continue to its next task
-			if !pr.stopping && !pr.cfg.SkipMintConfirmations {
+			if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
 					pr.wsReceivers[workerID] <- nodeURL
 				}
@@ -811,7 +837,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					break
 				}
 			}
-			if testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations {
+			if pr.cfg.NoWaitSubmission || (testName == conf.PerfTestTokenMint.String() && pr.cfg.SkipMintConfirmations) {
 				// For minting tests a worker can (if configured) skip waiting for a matching response event
 				// before making itself available for the next job
 				confirmationsPerAction = 0
@@ -844,14 +870,19 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			pr.totalTime.Record(totalDurationPerLoop)
 			secondsPerLoop := totalDurationPerLoop.Seconds()
 
-			eventReceivingDurationPerLoop := time.Since(sentTime)
-			eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
-			pr.receiveTime.Record(totalDurationPerLoop)
+			if pr.cfg.NoWaitSubmission {
+				log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
 
-			total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
-			subPortion := int((submissionSecondsPerLoop / total) * 100)
-			envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
-			log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
+			} else {
+				eventReceivingDurationPerLoop := time.Since(sentTime)
+				eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
+				pr.receiveTime.Record(totalDurationPerLoop)
+
+				total := submissionSecondsPerLoop + eventReceivingSecondsPerLoop
+				subPortion := int((submissionSecondsPerLoop / total) * 100)
+				envPortion := int((eventReceivingSecondsPerLoop / total) * 100)
+				log.Infof("%d <-- %s Finished (loop=%d), submission time: %f s, event receive time: %f s. Ratio (%d/%d) after %f seconds", workerID, testName, loop, submissionSecondsPerLoop, eventReceivingSecondsPerLoop, subPortion, envPortion, secondsPerLoop)
+			}
 
 			if histErr == nil {
 				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)

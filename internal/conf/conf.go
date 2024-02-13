@@ -51,7 +51,8 @@ type RunnerConfig struct {
 	MaxTimePerAction          time.Duration
 	MaxActions                int64
 	RampLength                time.Duration
-	SkipMintConfirmations     bool
+	SkipMintConfirmations     bool // deprecated
+	NoWaitSubmission          bool
 }
 
 type PerformanceTestConfig struct {
@@ -82,7 +83,8 @@ type InstanceConfig struct {
 	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
 	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	SkipMintConfirmations     bool             `json:"skipMintConfirmations" yaml:"skipMintConfirmations"`
+	SkipMintConfirmations     bool             `json:"skipMintConfirmations" yaml:"skipMintConfirmations"` // deprecated
+	NoWaitSubmission          bool             `json:"noWaitSubmission" yaml:"noWaitSubmission"`
 	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 }

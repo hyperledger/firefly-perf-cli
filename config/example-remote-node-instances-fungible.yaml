@@ -21,10 +21,8 @@ instances:
         workers: 4
     fireflyNamespace: default
     maxTimePerAction: 300s
-    skipMintConfirmations: true
-    startRate: 1
-    endRate: 20
-    rateRampUpTime: 60m
+    noWaitSubmission: true
+    rampLength: 60m
     tokenOptions:
       tokenType: nonfungible
       mintRecipient: 0xcd833ed165a7b26b68a3cb97daede71691dcaf97
