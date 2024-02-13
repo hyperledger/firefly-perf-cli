@@ -18,6 +18,7 @@ package conf
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/url"
 	"time"
 
@@ -44,8 +45,9 @@ type RunnerConfig struct {
 	Daemon                    bool
 	LogEvents                 bool
 	SenderURL                 string
-	FFNamespace               string
 	APIPrefix                 string
+	FFNamespace               string
+	FFNamespacePath           string
 	MaxTimePerAction          time.Duration
 	MaxActions                int64
 	RampLength                time.Duration
@@ -76,10 +78,11 @@ type InstanceConfig struct {
 	ContractOptions           ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
 	APIPrefix                 string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
 	FFNamespace               string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
+	FFNamespaceBasePath       string           `json:"namespaceBasePath,omitempty" yaml:"namespaceBasePath,omitempty"`
 	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
 	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
 	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	SkipMintConfirmations     bool             `json:"skipMintConfirmations,omitempty" yaml:"skipMintConfirmations,omitempty"`
+	SkipMintConfirmations     bool             `json:"skipMintConfirmations" yaml:"skipMintConfirmations"`
 	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 }
@@ -95,6 +98,7 @@ type NodeConfig struct {
 	APIEndpoint  string `json:"apiEndpoint,omitempty" yaml:"apiEndpoint,omitempty"`
 	AuthUsername string `json:"authUsername,omitempty" yaml:"authUsername,omitempty"`
 	AuthPassword string `json:"authPassword,omitempty" yaml:"authPassword,omitempty"`
+	AuthToken    string `json:"authToken,omitempty" yaml:"authToken,omitempty"`
 }
 
 type MessageOptions struct {
@@ -119,8 +123,8 @@ type TokenConfig struct {
 
 type ContractOptions struct {
 	Address   string `json:"address" yaml:"address"`
-	Channel   string `json:"channel" yaml:"channel"`
-	Chaincode string `json:"chaincode" yaml:"chaincode"`
+	Channel   string `json:"channel,omitempty" yaml:"channel,omitempty"`
+	Chaincode string `json:"chaincode,omitempty" yaml:"chaincode,omitempty"`
 }
 
 type FireFlyWsConfig struct {
@@ -133,6 +137,7 @@ type FireFlyWsConfig struct {
 	HeartbeatInterval      time.Duration `mapstructure:"heartbeatInterval" json:"heartbeatInterval" yaml:"heartbeatInterval"`
 	AuthUsername           string        `mapstructure:"authUsername" json:"authUsername" yaml:"authUsername"`
 	AuthPassword           string        `mapstructure:"authPassword" json:"authPassword" yaml:"authPassword"`
+	AuthToken              string        `mapstructure:"authToken" json:"authToken" yaml:"authToken"`
 	DisableTLSVerification bool          `mapstructure:"disableTLSVerification" json:"disableTLSVerification" yaml:"disableTLSVerification"`
 	ConnectionTimeout      time.Duration `mapstructure:"connectionTimeout" json:"connectionTimeout" yaml:"connectionTimeout"`
 }
@@ -140,7 +145,7 @@ type FireFlyWsConfig struct {
 func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig {
 	t, _ := url.QueryUnescape(conf.WSPath)
 
-	return &wsclient.WSConfig{
+	wsConfig := wsclient.WSConfig{
 		HTTPURL:                nodeURL,
 		WSKeyPath:              t,
 		ReadBufferSize:         conf.ReadBufferSize,
@@ -149,13 +154,22 @@ func GenerateWSConfig(nodeURL string, conf *FireFlyWsConfig) *wsclient.WSConfig 
 		MaximumDelay:           conf.MaximumDelay,
 		InitialConnectAttempts: conf.InitialConnectAttempts,
 		HeartbeatInterval:      conf.HeartbeatInterval,
-		AuthUsername:           conf.AuthUsername,
-		AuthPassword:           conf.AuthPassword,
 		ConnectionTimeout:      conf.ConnectionTimeout,
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: conf.DisableTLSVerification,
 		},
 	}
+
+	if conf.AuthToken != "" {
+		wsConfig.HTTPHeaders = fftypes.JSONObject{
+			"Authorization": fmt.Sprintf("Bearer %s", conf.AuthToken),
+		}
+	} else {
+		wsConfig.AuthUsername = conf.AuthUsername
+		wsConfig.AuthPassword = conf.AuthPassword
+	}
+
+	return &wsConfig
 }
 
 var (

@@ -39,7 +39,7 @@ See the [`Getting Started`](GettingStarted.md) guide for help running tests agai
 In the test configuration you define one or more test _instances_ for a single `ffperf` process to run. An instance then
 describes running one or more test _cases_ with a dedicated number of goroutine _workers_ against a _sender_ org and
 a _recipient_ org. The test configuration consumes a file reference to the stack JSON configuration produced by the
-[`ff` CLI](https://github.com/firefly-cli) (or can be defined manually) to understand the network topology, so that
+[`ff` CLI](https://github.com/hyperledger/firefly-cli) (or can be defined manually) to understand the network topology, so that
 sender's and recipient's just refer to indices within the stack.
 
 As a result, running the CLI consists of providing an `instances.yaml` file describe the test configuration
@@ -64,6 +64,13 @@ been defined in `instances.yaml`.
 Currently the types of test that can be run against a remote node are limited to those that only invoke a single endpoint. This makes
 it most suitable for test types `token_mint`, `custom_ethereum_contract` and `custom_fabric_contract` since these don't need
 responses to be received from other members of the FireFly network.
+
+To provide authentication when authenticating against a node endpoint, you can provide either of the following credentials in the `instances.yaml` under each `node` entry:
+
+- bearer token - set the access token as the `authToken` value
+- basic auth - set the username and password as the `authUsername` and `authPassword` values
+
+> `authToken` takes precedence over `authUsername` and `authPassword` values
 
 As a result, running the CLI consists of providing an `instances.yaml` file describe the test configuration
 and an instance index or name indicating which instance the process should run:

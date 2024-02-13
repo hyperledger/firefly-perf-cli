@@ -2,6 +2,7 @@ package perf
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly/pkg/core"
@@ -31,7 +32,7 @@ func (tc *private) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *private) RunOnce() (string, error) {
+func (tc *private) RunOnce(iterationCount int) (string, error) {
 
 	payload := fmt.Sprintf(`{
 		"data": [
@@ -54,6 +55,10 @@ func (tc *private) RunOnce() (string, error) {
 	}`, tc.getMessageString(tc.pr.cfg.MessageOptions.LongMessage), tc.pr.cfg.RecipientOrg, fmt.Sprintf("%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage core.Message
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "messages/private")
+	if err != nil {
+		return "", err
+	}
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -62,7 +67,7 @@ func (tc *private) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resMessage).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/messages/private", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error sending private message [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}

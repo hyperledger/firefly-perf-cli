@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"path"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/hyperledger/firefly-perf-cli/internal/perf"
 	"github.com/hyperledger/firefly-perf-cli/internal/server"
 	"github.com/hyperledger/firefly-perf-cli/internal/types"
+	"github.com/hyperledger/firefly-perf-cli/internal/util"
 	"github.com/hyperledger/firefly/pkg/core"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
@@ -64,17 +66,22 @@ Executes a instance within a performance test suite to generate synthetic load a
 			log.Warn("both the \"instance-name\" and \"instance-index\" flags were provided, using \"instance-name\"")
 		}
 
-		instance, err := selectInstance(config)
+		instanceConfig, err := selectInstance(config)
 		if err != nil {
 			return err
 		}
 
-		runnerConfig, err := generateRunnerConfigFromInstance(instance, config)
+		runnerConfig, err := generateRunnerConfigFromInstance(instanceConfig, config)
 		if err != nil {
 			return err
 		}
 
-		perfRunner = perf.New(runnerConfig)
+		configYaml, err := yaml.Marshal(instanceConfig)
+		if err != nil {
+			return err
+		}
+
+		perfRunner = perf.New(runnerConfig, util.NewReportForTestInstance(string(configYaml), instanceName))
 		httpServer = server.NewHttpServer()
 
 		return nil
@@ -163,9 +170,11 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 		if perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername != "" {
 			runnerConfig.WebSocket.AuthUsername = perfConfig.Nodes[instance.ManualNodeIndex].AuthUsername
 		}
-
 		if perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword != "" {
 			runnerConfig.WebSocket.AuthPassword = perfConfig.Nodes[instance.ManualNodeIndex].AuthPassword
+		}
+		if perfConfig.Nodes[instance.ManualNodeIndex].AuthToken != "" {
+			runnerConfig.WebSocket.AuthToken = perfConfig.Nodes[instance.ManualNodeIndex].AuthToken
 		}
 	} else {
 		// Read endpoint information from the stack JSON
@@ -212,6 +221,13 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.DelinquentAction = deliquentAction
 	runnerConfig.FFNamespace = instance.FFNamespace
 	runnerConfig.APIPrefix = instance.APIPrefix
+	if instance.FFNamespaceBasePath != "" {
+		basePath, err := url.JoinPath(instance.APIPrefix, instance.FFNamespaceBasePath)
+		if err != nil {
+			return nil, err
+		}
+		runnerConfig.FFNamespacePath = basePath
+	}
 	runnerConfig.MaxTimePerAction = instance.MaxTimePerAction
 	runnerConfig.MaxActions = instance.MaxActions
 	runnerConfig.RampLength = instance.RampLength
@@ -235,6 +251,15 @@ func setDefaults(runnerConfig *conf.RunnerConfig) {
 	if runnerConfig.FFNamespace == "" {
 		runnerConfig.FFNamespace = "default"
 	}
+
+	if runnerConfig.FFNamespacePath == "" {
+		basePath, err := url.JoinPath(runnerConfig.APIPrefix, "api/v1/namespaces", runnerConfig.FFNamespace)
+		if err != nil {
+			log.Error(err.Error())
+		}
+		runnerConfig.FFNamespacePath = basePath
+	}
+
 	if runnerConfig.TokenOptions.TokenPoolConnectorName == "" {
 		runnerConfig.TokenOptions.TokenPoolConnectorName = "erc20_erc721"
 	}
