@@ -336,7 +336,7 @@ func (pr *perfRunner) Start() (err error) {
 			}
 
 			// Create subscription for message confirmations if supportsData == true
-			if *pr.cfg.TokenOptions.SupportsData {
+			if pr.cfg.TokenOptions.SupportsData == nil || *pr.cfg.TokenOptions.SupportsData {
 				log.Infof("Creating message subscription for data in token mints")
 				subID, subName, err = pr.createMsgConfirmSub(nodeURL, pr.tagPrefix, fmt.Sprintf("^%s_", pr.tagPrefix))
 				if err != nil {
