@@ -18,7 +18,7 @@ package perf
 
 import (
 	"errors"
-	"fmt"
+	"net/url"
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly/pkg/core"
@@ -43,10 +43,13 @@ func (pr *perfRunner) CreateTokenPool() error {
 	if pr.cfg.TokenOptions.Config.PoolBlockNumber != "" {
 		config["blockNumber"] = pr.cfg.TokenOptions.Config.PoolBlockNumber
 	}
-
+	fullPath, err := url.JoinPath(pr.client.BaseURL, pr.cfg.FFNamespacePath, "tokens/pools?confirm=true")
+	if err != nil {
+		return err
+	}
 	res, err := pr.client.R().
 		SetBody(&body).
-		Post(fmt.Sprintf("/%sapi/v1/namespaces/%s/tokens/pools?confirm=true", pr.cfg.APIPrefix, pr.cfg.FFNamespace))
+		Post(fullPath)
 
 	if err != nil || !res.IsSuccess() {
 		return errors.New("Failed to create token pool")

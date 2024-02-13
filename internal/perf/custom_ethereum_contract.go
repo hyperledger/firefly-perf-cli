@@ -19,6 +19,7 @@ package perf
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strconv"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
@@ -29,7 +30,6 @@ import (
 
 type customEthereum struct {
 	testBase
-	iteration int
 }
 
 func newCustomEthereumTestWorker(pr *perfRunner, workerID int, actionsPerLoop int) TestCase {
@@ -50,8 +50,8 @@ func (tc *customEthereum) IDType() TrackingIDType {
 	return TrackingIDTypeWorkerNumber
 }
 
-func (tc *customEthereum) RunOnce() (string, error) {
-	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, tc.iteration)
+func (tc *customEthereum) RunOnce(iterationCount int) (string, error) {
+	idempotencyKey := tc.pr.getIdempotencyKey(tc.workerID, iterationCount)
 	invokeOptionsJSON := ""
 	if tc.pr.cfg.InvokeOptions != nil {
 		b, err := json.Marshal(tc.pr.cfg.InvokeOptions)
@@ -81,10 +81,15 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		"input": {
 			"newValue": %v
 		},
+		"key": "%s",
 		"idempotencyKey": "%s"%s
-	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, idempotencyKey, invokeOptionsJSON)
+	}`, tc.pr.cfg.ContractOptions.Address, tc.workerID, tc.pr.cfg.SigningKey, idempotencyKey, invokeOptionsJSON)
 	var resContractCall map[string]interface{}
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "contracts/invoke")
+	if err != nil {
+		return "", err
+	}
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -93,7 +98,7 @@ func (tc *customEthereum) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resContractCall).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/contracts/invoke", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil || res.IsError() {
 		if res.StatusCode() == 409 {
 			log.Warnf("Request already received by FireFly: %+v", &resError)
@@ -101,6 +106,5 @@ func (tc *customEthereum) RunOnce() (string, error) {
 			return "", fmt.Errorf("Error invoking contract [%d]: %s (%+v)", resStatus(res), err, &resError)
 		}
 	}
-	tc.iteration++
 	return strconv.Itoa(tc.workerID), nil
 }

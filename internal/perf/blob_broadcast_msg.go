@@ -3,6 +3,7 @@ package perf
 import (
 	"fmt"
 	"math/big"
+	"net/url"
 
 	"github.com/hyperledger/firefly-perf-cli/internal/conf"
 	"github.com/hyperledger/firefly/pkg/core"
@@ -32,7 +33,7 @@ func (tc *blobBroadcast) IDType() TrackingIDType {
 	return TrackingIDTypeMessageID
 }
 
-func (tc *blobBroadcast) RunOnce() (string, error) {
+func (tc *blobBroadcast) RunOnce(iterationCount int) (string, error) {
 
 	blob, hash := tc.generateBlob(big.NewInt(1024))
 	dataID, err := tc.uploadBlob(blob, hash, tc.pr.client.BaseURL)
@@ -52,6 +53,10 @@ func (tc *blobBroadcast) RunOnce() (string, error) {
 	 }`, dataID, fmt.Sprintf("blob_%s_%d", tc.pr.tagPrefix, tc.workerID))
 	var resMessage core.Message
 	var resError fftypes.RESTError
+	fullPath, err := url.JoinPath(tc.pr.client.BaseURL, tc.pr.cfg.FFNamespacePath, "messages/broadcast")
+	if err != nil {
+		return "", err
+	}
 	res, err := tc.pr.client.R().
 		SetHeaders(map[string]string{
 			"Accept":       "application/json",
@@ -60,7 +65,7 @@ func (tc *blobBroadcast) RunOnce() (string, error) {
 		SetBody([]byte(payload)).
 		SetResult(&resMessage).
 		SetError(&resError).
-		Post(fmt.Sprintf("%s/%sapi/v1/namespaces/%s/messages/broadcast", tc.pr.client.BaseURL, tc.pr.cfg.APIPrefix, tc.pr.cfg.FFNamespace))
+		Post(fullPath)
 	if err != nil || res.IsError() {
 		return "", fmt.Errorf("Error sending broadcast message with blob attachment [%d]: %s (%+v)", resStatus(res), err, &resError)
 	}
