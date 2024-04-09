@@ -80,7 +80,7 @@ printf ${PURPLE}"Deploying custom test contract...\n${NC}"
 
 TESTS='{"name": "msg_broadcast", "workers":50},{"name": "msg_private", "workers":50},{"name": "blob_broadcast", "workers":30},{"name": "blob_private", "workers":30}'
 
-if [ "$BLOCKCHAIN_PROVIDER" == "geth" ]; then
+if [ "$BLOCKCHAIN_PROVIDER" = "geth" ] || [ "$BLOCKCHAIN_PROVIDER" = "besu" ]; then
     output=$(${FF_CLI} deploy ethereum $NEW_STACK_NAME ./firefly/test/data/contracts/simplestorage/simple_storage.json | jq -r '.address')
     prefix='contract address: '
     CONTRACT_ADDRESS=${output#"$prefix"}
