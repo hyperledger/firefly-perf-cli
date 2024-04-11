@@ -53,6 +53,7 @@ type RunnerConfig struct {
 	RampLength                time.Duration
 	SkipMintConfirmations     bool // deprecated
 	NoWaitSubmission          bool
+	BatchingForWebsocket      bool
 }
 
 type PerformanceTestConfig struct {

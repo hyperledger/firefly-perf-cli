@@ -40,6 +40,7 @@ import (
 	"github.com/hyperledger/firefly/pkg/core"
 	dto "github.com/prometheus/client_model/go"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -276,7 +277,6 @@ func (pr *perfRunner) Init() (err error) {
 	} else {
 		pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
 	}
-	// Set request retry with backoff
 	pr.client.
 		SetRetryCount(10).
 		// You can override initial retry wait time.
@@ -426,7 +426,11 @@ func (pr *perfRunner) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		go pr.eventLoop(pr.nodeURLs[i], wsconn)
+		if pr.cfg.BatchingForWebsocket {
+			go pr.batchEventLoop(pr.nodeURLs[i], wsconn)
+		} else {
+			go pr.eventLoop(pr.nodeURLs[i], wsconn)
+		}
 	}
 
 	id := 0
@@ -620,6 +624,170 @@ func (pr *perfRunner) cleanup() {
 
 }
 
+func (pr *perfRunner) filterEvent(event core.EventDelivery, url string) (workerID int, err error) {
+	workerID = -1
+
+	switch event.Type {
+	case core.EventTypeBlockchainEventReceived:
+		if event.BlockchainEvent == nil {
+			log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
+			return workerID, fmt.Errorf("blockchain event not found for event: %s", event.ID)
+		}
+		var value string
+		switch event.BlockchainEvent.Source {
+		case "ethereum":
+			value = event.BlockchainEvent.Output.GetString("value")
+		case "fabric":
+			value = event.BlockchainEvent.Output.GetString("Owner")
+		}
+		workerID, err = strconv.Atoi(value)
+		if err != nil {
+			log.Errorf("Could not parse event value: %s", err)
+			b, _ := json.Marshal(&event)
+			log.Infof("Full event: %s", b)
+		} else {
+			log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
+		}
+	case core.EventTypeTransferConfirmed:
+		if pr.cfg.TokenOptions.SupportsURI {
+			// If there's a URI in the event we'll have put the worker ID there
+			uriElements := strings.Split(event.TokenTransfer.URI, "//")
+			if len(uriElements) == 2 {
+				workerID, err = strconv.Atoi(uriElements[1])
+				if err != nil {
+					log.Errorf("Could not parse event value: %s", err)
+					b, _ := json.Marshal(&event)
+					log.Infof("Full event: %s", b)
+				} else {
+					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
+				}
+			} else {
+				log.Errorf("no URI in token transfer event: %s")
+				b, _ := json.Marshal(&event)
+				log.Errorf("Full event: %s", b)
+
+				incompleteEventsCounter.Inc()
+
+				if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
+				}
+			}
+		}
+	default:
+		workerIDFromTag := ""
+
+		if event.Type.String() == "protocol_error" {
+			// Can't do anything but shut down gracefully
+			log.Error("Protocol error event - shutting down")
+			pr.shutdown()
+		} else {
+			subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
+			if !ok {
+				return workerID, fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
+			}
+			switch subInfo.Job {
+			case conf.PerfTestBlobBroadcast, conf.PerfTestBlobPrivateMsg:
+				workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
+			default:
+				workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
+			}
+
+			workerID, err = strconv.Atoi(workerIDFromTag)
+			if err != nil {
+				log.Errorf("Could not parse message tag: %s", err)
+				b, _ := json.Marshal(&event)
+				log.Infof("Full event: %s", b)
+			}
+
+			var dataID *fftypes.UUID
+			if len(event.Message.Data) > 0 {
+				dataID = event.Message.Data[0].ID
+			}
+			log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, url, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, dataID)
+		}
+	}
+
+	return workerID, nil
+}
+
+func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
+	log.Infof("Batch Event loop started for %s...", nodeURL)
+	for {
+		log.Trace("blocking until wsconn.Receive or ctx.Done()")
+		select {
+		// Wait to receive websocket event
+		case msgBytes, ok := <-wsconn.Receive():
+			if !ok {
+				log.Errorf("Error receiving websocket")
+				return
+			}
+			log.Trace("received from websocket")
+
+			// Handle websocket event
+			var batch core.WSEventBatch
+			json.Unmarshal(msgBytes, &batch)
+
+			if pr.cfg.LogEvents {
+				fmt.Println("Batch: ", string(msgBytes))
+			}
+
+			var g errgroup.Group
+
+			for _, event := range batch.Events {
+				g.Go(func() error {
+					if pr.cfg.LogEvents {
+						eventJSON, _ := json.Marshal(event)
+						fmt.Println("Event: ", string(eventJSON))
+					}
+
+					receivedEventsCounter.Inc()
+
+					workerID, err := pr.filterEvent(*event, wsconn.URL())
+					if err != nil {
+						return err
+					}
+
+					pr.recordCompletedAction()
+					// Release worker so it can continue to its next task
+					if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
+						if workerID >= 0 {
+							// No need for locking as channel have built in support
+							pr.wsReceivers[workerID] <- nodeURL
+						}
+					}
+					return nil
+				})
+			}
+
+			// Wait for all go routines to complete
+			// The first non-nil go routine will be returned
+			// and we will return the error
+			if err := g.Wait(); err != nil {
+				return err
+			}
+
+			// We have completed all the go routines
+			// and can ack the batch
+			// Ack batch event
+			ack := &core.WSAck{
+				WSActionBase: core.WSActionBase{
+					Type: core.WSClientActionAck,
+				},
+				ID: batch.ID,
+				Subscription: &core.SubscriptionRef{
+					ID: batch.Subscription.ID,
+				},
+			}
+			ackJSON, _ := json.Marshal(ack)
+			wsconn.Send(context.Background(), ackJSON)
+		case <-pr.ctx.Done():
+			log.Warnf("Run loop exiting (context cancelled)")
+			wsconn.Close()
+			return
+		}
+	}
+}
+
 func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
 	log.Infof("Event loop started for %s...", nodeURL)
 	for {
@@ -643,86 +811,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				fmt.Println("Event: ", string(msgBytes))
 			}
 
-			workerID := -1
-
-			switch event.Type {
-			case core.EventTypeBlockchainEventReceived:
-				if event.BlockchainEvent == nil {
-					log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
-					return fmt.Errorf("blockchain event not found for event: %s", event.ID)
-				}
-				var value string
-				switch event.BlockchainEvent.Source {
-				case "ethereum":
-					value = event.BlockchainEvent.Output.GetString("value")
-				case "fabric":
-					value = event.BlockchainEvent.Output.GetString("Owner")
-				}
-				workerID, err = strconv.Atoi(value)
-				if err != nil {
-					log.Errorf("Could not parse event value: %s", err)
-					b, _ := json.Marshal(&event)
-					log.Infof("Full event: %s", b)
-				} else {
-					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
-				}
-			case core.EventTypeTransferConfirmed:
-				if pr.cfg.TokenOptions.SupportsURI {
-					// If there's a URI in the event we'll have put the worker ID there
-					uriElements := strings.Split(event.TokenTransfer.URI, "//")
-					if len(uriElements) == 2 {
-						workerID, err = strconv.Atoi(uriElements[1])
-						if err != nil {
-							log.Errorf("Could not parse event value: %s", err)
-							b, _ := json.Marshal(&event)
-							log.Infof("Full event: %s", b)
-						} else {
-							log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
-						}
-					} else {
-						log.Errorf("no URI in token transfer event: %s")
-						b, _ := json.Marshal(&event)
-						log.Errorf("Full event: %s", b)
-
-						incompleteEventsCounter.Inc()
-
-						if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-							log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
-						}
-					}
-				}
-			default:
-				workerIDFromTag := ""
-
-				if event.Type.String() == "protocol_error" {
-					// Can't do anything but shut down gracefully
-					log.Error("Protocol error event - shutting down")
-					pr.shutdown()
-				} else {
-					subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
-					if !ok {
-						return fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
-					}
-					switch subInfo.Job {
-					case conf.PerfTestBlobBroadcast, conf.PerfTestBlobPrivateMsg:
-						workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
-					default:
-						workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
-					}
-
-					workerID, err = strconv.Atoi(workerIDFromTag)
-					if err != nil {
-						log.Errorf("Could not parse message tag: %s", err)
-						b, _ := json.Marshal(&event)
-						log.Infof("Full event: %s", b)
-					}
-
-					var dataID *fftypes.UUID
-					if len(event.Message.Data) > 0 {
-						dataID = event.Message.Data[0].ID
-					}
-					log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, dataID)
-				}
+			workerID, err := pr.filterEvent(event, wsconn.URL())
+			if err != nil {
+				return err
 			}
 
 			// Ack websocket event
@@ -909,9 +1000,10 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	}
 }
 
+// TODO at the option of batching here!
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, subName string, err error) {
 	var sub core.Subscription
-	readAhead := uint16(len(pr.wsReceivers))
+	readAhead := uint16(len(pr.wsReceivers)) // TODO this makes no sense as it's arbitrary from what I can see
 	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
@@ -931,6 +1023,11 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 			},
 		},
 		Transport: TRANSPORT_TYPE,
+	}
+	if pr.cfg.BatchingForWebsocket {
+		readAhead = 50
+		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
+		subPayload.Options.ReadAhead = &readAhead
 	}
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
@@ -1272,6 +1369,11 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 		},
 		Transport: TRANSPORT_TYPE,
 	}
+	if pr.cfg.BatchingForWebsocket {
+		readAhead = 50
+		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
+		subPayload.Options.ReadAhead = &readAhead
+	}
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
@@ -1316,6 +1418,13 @@ func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName 
 		},
 		Transport: TRANSPORT_TYPE,
 	}
+
+	if pr.cfg.BatchingForWebsocket {
+		readAhead = 50
+		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
+		subPayload.Options.ReadAhead = &readAhead
+	}
+
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
