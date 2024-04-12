@@ -211,6 +211,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.MessageOptions = instance.MessageOptions
 	runnerConfig.TokenOptions = instance.TokenOptions
 	runnerConfig.ContractOptions = instance.ContractOptions
+	runnerConfig.SubscriptionCoreOptions = instance.SubscriptionCoreOptions
 
 	// Common configuration regardless of running with manually defined nodes or a local stack
 	runnerConfig.LogLevel = perfConfig.LogLevel

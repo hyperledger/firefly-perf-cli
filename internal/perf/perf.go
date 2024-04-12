@@ -426,7 +426,7 @@ func (pr *perfRunner) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		if pr.cfg.BatchingForWebsocket {
+		if pr.cfg.SubscriptionCoreOptions != nil && pr.cfg.SubscriptionCoreOptions.Batch != nil && *pr.cfg.SubscriptionCoreOptions.Batch {
 			go pr.batchEventLoop(pr.nodeURLs[i], wsconn)
 		} else {
 			go pr.eventLoop(pr.nodeURLs[i], wsconn)
@@ -1003,19 +1003,12 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 // TODO at the option of batching here!
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, subName string, err error) {
 	var sub core.Subscription
-	readAhead := uint16(len(pr.wsReceivers)) // TODO this makes no sense as it's arbitrary from what I can see
-	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      name,
 			Namespace: pr.cfg.FFNamespace,
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options: pr.constructSubscriptionsOptions(),
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeMessageConfirmed.String(),
 			Message: core.MessageFilter{
@@ -1023,11 +1016,6 @@ func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID stri
 			},
 		},
 		Transport: TRANSPORT_TYPE,
-	}
-	if pr.cfg.BatchingForWebsocket {
-		readAhead = 50
-		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
-		subPayload.Options.ReadAhead = &readAhead
 	}
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
@@ -1348,8 +1336,6 @@ func (pr *perfRunner) deleteContractListener(nodeURL string, listenerID string) 
 func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID string, subName string, err error) {
 	log.Infof("Creating contract subscription %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 	var sub core.Subscription
-	readAhead := uint16(len(pr.wsReceivers))
-	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      fmt.Sprintf("contracts_%s", pr.tagPrefix),
@@ -1361,18 +1347,8 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 				Listener: listenerID,
 			},
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options:   pr.constructSubscriptionsOptions(),
 		Transport: TRANSPORT_TYPE,
-	}
-	if pr.cfg.BatchingForWebsocket {
-		readAhead = 50
-		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
-		subPayload.Options.ReadAhead = &readAhead
 	}
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
@@ -1397,32 +1373,44 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 	return sub.ID.String(), sub.Name, nil
 }
 
-func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName string, err error) {
-	log.Infof("Creating token mint subscription %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
+func (pr *perfRunner) constructSubscriptionsOptions() core.SubscriptionOptions {
 	readAhead := uint16(len(pr.wsReceivers))
 	firstEvent := core.SubOptsFirstEventNewest
+	// Default options
+	options := core.SubscriptionOptions{
+		SubscriptionCoreOptions: core.SubscriptionCoreOptions{
+			ReadAhead:  &readAhead,
+			FirstEvent: &firstEvent,
+		},
+	}
+	if pr.cfg.SubscriptionCoreOptions != nil {
+		options.SubscriptionCoreOptions = *pr.cfg.SubscriptionCoreOptions
+		if options.SubscriptionCoreOptions.ReadAhead == nil {
+			// ReadAhead not specified in config, so default
+			options.SubscriptionCoreOptions.ReadAhead = &readAhead
+		}
+		if options.SubscriptionCoreOptions.FirstEvent == nil {
+			// FirstEvent not specified in config, so default
+			options.SubscriptionCoreOptions.FirstEvent = &firstEvent
+		}
+	}
+
+	return options
+}
+
+func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName string, err error) {
+	log.Infof("Creating token mint subscription %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
 	var sub core.Subscription
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      fmt.Sprintf("mint_%s", pr.tagPrefix),
 			Namespace: pr.cfg.FFNamespace,
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options: pr.constructSubscriptionsOptions(),
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeTransferConfirmed.String(),
 		},
 		Transport: TRANSPORT_TYPE,
-	}
-
-	if pr.cfg.BatchingForWebsocket {
-		readAhead = 50
-		subPayload.Options.SubscriptionCoreOptions.Batch = &pr.cfg.BatchingForWebsocket
-		subPayload.Options.ReadAhead = &readAhead
 	}
 
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
