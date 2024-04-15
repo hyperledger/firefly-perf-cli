@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -788,6 +789,10 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 			}
 			ackJSON, _ := json.Marshal(ack)
 			wsconn.Send(context.Background(), ackJSON)
+
+			pr.summary.mutex.Lock()
+			pr.calculateCurrentTps(true)
+			pr.summary.mutex.Unlock()
 		case <-pr.ctx.Done():
 			log.Warnf("Run loop exiting (context cancelled)")
 			wsconn.Close()
@@ -843,6 +848,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					pr.wsReceivers[workerID] <- nodeURL
 				}
 			}
+			pr.summary.mutex.Lock()
+			pr.calculateCurrentTps(true)
+			pr.summary.mutex.Unlock()
 		case <-pr.ctx.Done():
 			log.Warnf("Run loop exiting (context cancelled)")
 			wsconn.Close()
@@ -1195,13 +1203,11 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 
 func (pr *perfRunner) recordCompletedAction() {
 	if pr.ramping() {
-		pr.summary.rampSummary++
+		_ = atomic.AddInt64(&pr.summary.rampSummary, 1) // increment atomically
 	} else {
 		pr.summary.totalSummary++
+		_ = atomic.AddInt64(&pr.summary.totalSummary, 1) // increment atomically
 	}
-	pr.summary.mutex.Lock()
-	defer pr.summary.mutex.Unlock()
-	pr.calculateCurrentTps(true)
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
