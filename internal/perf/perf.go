@@ -156,6 +156,11 @@ type inflightTest struct {
 
 var mintStartingBalance int
 
+type summary struct {
+	mutex        *sync.Mutex
+	rampSummary  int64
+	totalSummary int64
+}
 type perfRunner struct {
 	bfr      chan int
 	cfg      *conf.RunnerConfig
@@ -170,14 +175,12 @@ type perfRunner struct {
 	startRampTime int64
 	endRampTime   int64
 
-	reportBuilder *util.Report
-	sendTime      *util.Latency
-	receiveTime   *util.Latency
-	totalTime     *util.Latency
-
+	reportBuilder           *util.Report
+	sendTime                *util.Latency
+	receiveTime             *util.Latency
+	totalTime               *util.Latency
+	summary                 summary
 	msgTimeMap              map[string]*inflightTest
-	rampSummary             int64
-	totalSummary            int64
 	poolName                string
 	poolConnectorName       string
 	tagPrefix               string
@@ -244,14 +247,17 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:        make(map[string]*inflightTest),
-		totalSummary:      0,
-		wsReceivers:       wsReceivers,
-		wsUUID:            wsUUID,
-		nodeURLs:          config.NodeURLs,
-		subscriptionMap:   make(map[string]SubscriptionInfo),
-		daemon:            config.Daemon,
-		sender:            config.SenderURL,
-		totalWorkers:      totalWorkers,
+		summary: summary{
+			totalSummary: 0,
+			mutex:        &sync.Mutex{},
+		},
+		wsReceivers:     wsReceivers,
+		wsUUID:          wsUUID,
+		nodeURLs:        config.NodeURLs,
+		subscriptionMap: make(map[string]SubscriptionInfo),
+		daemon:          config.Daemon,
+		sender:          config.SenderURL,
+		totalWorkers:    totalWorkers,
 	}
 
 	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
@@ -549,7 +555,7 @@ perfLoop:
 		}
 	}
 
-	measuredActions := pr.totalSummary
+	measuredActions := pr.summary.totalSummary
 	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
 	testNames := make([]string, len(pr.cfg.Tests))
@@ -1188,12 +1194,12 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 
 func (pr *perfRunner) recordCompletedAction() {
 	if pr.ramping() {
-		pr.rampSummary++
+		pr.summary.rampSummary++
 	} else {
-		pr.totalSummary++
+		pr.summary.totalSummary++
 	}
-	mutex.Lock()
-	defer mutex.Unlock()
+	pr.summary.mutex.Lock()
+	defer pr.summary.mutex.Unlock()
 	pr.calculateCurrentTps(true)
 }
 
@@ -1488,10 +1494,10 @@ func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
 	var startTime int64
 	var measuredActions int64
 	if pr.ramping() {
-		measuredActions = pr.rampSummary
+		measuredActions = pr.summary.rampSummary
 		startTime = pr.startRampTime
 	} else {
-		measuredActions = pr.totalSummary
+		measuredActions = pr.summary.totalSummary
 		startTime = pr.startTime
 	}
 	duration := time.Since(time.Unix(startTime, 0)).Seconds()
