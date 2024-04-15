@@ -176,12 +176,13 @@ type perfRunner struct {
 	startRampTime int64
 	endRampTime   int64
 
-	reportBuilder           *util.Report
-	sendTime                *util.Latency
-	receiveTime             *util.Latency
-	totalTime               *util.Latency
-	summary                 summary
-	msgTimeMap              map[string]*inflightTest
+	reportBuilder *util.Report
+	sendTime      *util.Latency
+	receiveTime   *util.Latency
+	totalTime     *util.Latency
+	summary       summary
+	msgTimeMap    sync.Map
+	//msgTimeMap              map[string]*inflightTest
 	poolName                string
 	poolConnectorName       string
 	tagPrefix               string
@@ -247,7 +248,8 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 		totalTime:         &util.Latency{},
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
-		msgTimeMap:        make(map[string]*inflightTest),
+		msgTimeMap:        sync.Map{},
+		// msgTimeMap:        make(map[string]*inflightTest),
 		summary: summary{
 			totalSummary: 0,
 			mutex:        &sync.Mutex{},
@@ -1125,14 +1127,15 @@ func getFFClient(node string) *resty.Client {
 }
 
 func (pr *perfRunner) detectDelinquentMsgs() bool {
-	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
-	for trackingID, inflight := range pr.msgTimeMap {
+	pr.msgTimeMap.Range(func(k, v interface{}) bool {
+		trackingID := k.(string)
+		inflight := v.(inflightTest)
 		if time.Since(inflight.time).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
 			delinquentMsgs[trackingID] = inflight.time
 		}
-	}
-	mutex.Unlock()
+		return true
+	})
 
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
@@ -1194,10 +1197,10 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if len(trackingID) > 0 {
-		pr.msgTimeMap[trackingID] = &inflightTest{
+		pr.msgTimeMap.Store(trackingID, &inflightTest{
 			testCase: tc,
 			time:     time.Now(),
-		}
+		})
 	}
 }
 
@@ -1211,9 +1214,7 @@ func (pr *perfRunner) recordCompletedAction() {
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	delete(pr.msgTimeMap, trackingID)
+	pr.msgTimeMap.Delete(trackingID)
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
