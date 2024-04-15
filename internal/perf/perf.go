@@ -735,7 +735,7 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 			json.Unmarshal(msgBytes, &batch)
 
 			if pr.cfg.LogEvents {
-				fmt.Println("Batch: ", string(msgBytes))
+				log.Info("Batch: ", string(msgBytes))
 			}
 
 			var g errgroup.Group
@@ -744,7 +744,7 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 				g.Go(func() error {
 					if pr.cfg.LogEvents {
 						eventJSON, _ := json.Marshal(event)
-						fmt.Println("Event: ", string(eventJSON))
+						log.Info("Event: ", string(eventJSON))
 					}
 
 					receivedEventsCounter.Inc()
