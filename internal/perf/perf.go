@@ -768,9 +768,11 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 			// Wait for all go routines to complete
 			// The first non-nil go routine will be returned
 			// and we will return the error
+			log.Debug("Waiting for events from websocket to be handled")
 			if err := g.Wait(); err != nil {
 				return err
 			}
+			log.Debug("All events from websocket handled")
 
 			// We have completed all the go routines
 			// and can ack the batch
@@ -969,7 +971,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 			if pr.cfg.NoWaitSubmission {
 				log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
-
 			} else {
 				eventReceivingDurationPerLoop := time.Since(sentTime)
 				eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
