@@ -744,15 +744,16 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 			g.SetLimit(-1)
 
 			for _, event := range batch.Events {
+				thisEvent := event
 				g.Go(func() error {
 					if pr.cfg.LogEvents {
-						eventJSON, _ := json.Marshal(event)
+						eventJSON, _ := json.Marshal(thisEvent)
 						log.Info("Event: ", string(eventJSON))
 					}
 
 					receivedEventsCounter.Inc()
 
-					workerID, err := pr.filterEvent(*event, wsconn.URL())
+					workerID, err := pr.filterEvent(*thisEvent, wsconn.URL())
 					if err != nil {
 						return err
 					}
