@@ -1130,7 +1130,7 @@ func (pr *perfRunner) detectDelinquentMsgs() bool {
 	delinquentMsgs := make(map[string]time.Time)
 	pr.msgTimeMap.Range(func(k, v interface{}) bool {
 		trackingID := k.(string)
-		inflight := v.(inflightTest)
+		inflight := v.(*inflightTest)
 		if time.Since(inflight.time).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
 			delinquentMsgs[trackingID] = inflight.time
 		}
