@@ -95,7 +95,7 @@ type InstanceConfig struct {
 	NoWaitSubmission          bool                          `json:"noWaitSubmission" yaml:"noWaitSubmission"`
 	DelinquentAction          string                        `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string                        `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
-	SubscriptionCoreOptions   *core.SubscriptionCoreOptions `json:"subscriptionOptions,omitempty"`
+	SubscriptionCoreOptions   *core.SubscriptionCoreOptions `json:"subscriptionOptions,omitempty" yaml:"subscriptionOptions,omitempty"`
 }
 
 type SubscriptionOptions struct {
