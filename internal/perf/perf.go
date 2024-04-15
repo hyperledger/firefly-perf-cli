@@ -740,7 +740,8 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 				log.Info("Batch: ", string(msgBytes))
 			}
 
-			var g errgroup.Group
+			g, _ := errgroup.WithContext(pr.ctx)
+			g.SetLimit(-1)
 
 			for _, event := range batch.Events {
 				g.Go(func() error {
@@ -1214,6 +1215,7 @@ func (pr *perfRunner) recordCompletedAction() {
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
+	log.Debugf("Deleting tracking request: %s", trackingID)
 	pr.msgTimeMap.Delete(trackingID)
 }
 
