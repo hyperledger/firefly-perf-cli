@@ -183,6 +183,8 @@ var (
 	PerfTestTokenMint fftypes.FFEnum = "token_mint"
 	// PerfTestCustomEthereumContract invokes a custom smart contract and checks events emitted by it
 	PerfTestCustomEthereumContract fftypes.FFEnum = "custom_ethereum_contract"
+	// PerfTestCustomEthereumContract invokes an erc20 transfer and checks events emitted by it
+	PerfTestERC20TransferContract fftypes.FFEnum = "erc20_transfer"
 	// PerfTestCustomFabricContract invokes a custom smart contract and checks events emitted by it
 	PerfTestCustomFabricContract fftypes.FFEnum = "custom_fabric_contract"
 	// PerfTestBlobBroadcast broadcasts a blob

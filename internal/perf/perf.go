@@ -376,6 +376,22 @@ func (pr *perfRunner) Start() (err error) {
 			}
 		}
 
+		if containsTargetTest(pr.cfg.Tests, conf.PerfTestERC20TransferContract) {
+			listenerID, err = pr.createERC20ContractListener(nodeURL)
+			if err != nil {
+				return err
+			}
+			subID, subName, err := pr.createContractsSub(nodeURL, listenerID)
+			if err != nil {
+				return err
+			}
+			pr.subscriptionMap[subID] = SubscriptionInfo{
+				NodeURL: nodeURL,
+				Name:    subName,
+				Job:     conf.PerfTestERC20TransferContract,
+			}
+		}
+
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomFabricContract) {
 			listenerID, err = pr.createFabricContractListener(nodeURL)
 			if err != nil {
@@ -444,6 +460,8 @@ func (pr *perfRunner) Start() (err error) {
 				tc = newTokenMintTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomEthereumContract:
 				tc = newCustomEthereumTestWorker(pr, id, test.ActionsPerLoop)
+			case conf.PerfTestERC20TransferContract:
+				tc = newERC20TransferTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomFabricContract:
 				tc = newCustomFabricTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestBlobBroadcast:
@@ -1116,6 +1134,80 @@ func (pr *perfRunner) stopTrackingRequest(trackingID string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	delete(pr.msgTimeMap, trackingID)
+}
+
+func (pr *perfRunner) createERC20ContractListener(nodeURL string) (string, error) {
+	subPayload := fmt.Sprintf(`{
+		"location": {
+			"address": "%s"
+		},
+		"event": {
+			"name": "Transfer",
+			"description": "",
+			"params": [
+				{
+					"name": "from",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address",
+							"internalType": "address",
+							"indexed": true
+						}
+					}
+				},
+				{
+					"name": "to",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address",
+							"internalType": "address",
+							"indexed": true
+						}
+					}
+				},
+				{
+					"name": "value",
+					"schema": {
+						"type": "integer",
+						"details": {
+							"type": "uint256",
+							"internalType": "uint256"
+						}
+					}
+				}
+			]
+		},
+		"topic": "%s"
+	}`, pr.cfg.ContractOptions.Address, fftypes.NewUUID())
+
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/listeners")
+	if err != nil {
+		return "", err
+	}
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		SetResult(&responseBody).
+		SetError(&errResponse).
+		Post(fullPath)
+	if err != nil {
+		return "", err
+	}
+	if res.IsError() {
+		return "", fmt.Errorf("failed: %s", errResponse)
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Created contract listener on %s: %s", nodeURL, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
+	return id, nil
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
