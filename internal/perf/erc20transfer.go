@@ -89,7 +89,7 @@ func (tc *erc20Transfer) RunOnce(iterationCount int) (string, error) {
 				{
 					"name": "",
 					"schema": {
-						"type": "bool",
+						"type": "boolean",
 						"details": {
 							"type": "bool"
 						}
