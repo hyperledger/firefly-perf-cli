@@ -1153,7 +1153,8 @@ func (pr *perfRunner) createERC20ContractListener(nodeURL string) (string, error
 							"type": "address",
 							"internalType": "address",
 							"indexed": true
-						}
+						},
+						"description": "A hex encoded set of bytes, with an optional '0x' prefix"
 					}
 				},
 				{
@@ -1164,17 +1165,26 @@ func (pr *perfRunner) createERC20ContractListener(nodeURL string) (string, error
 							"type": "address",
 							"internalType": "address",
 							"indexed": true
-						}
+						},
+						"description": "A hex encoded set of bytes, with an optional '0x' prefix"
 					}
 				},
 				{
 					"name": "value",
 					"schema": {
-						"type": "integer",
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "integer"
+							}
+						],
 						"details": {
 							"type": "uint256",
 							"internalType": "uint256"
-						}
+						},
+						"description": "An integer. You are recommended to use a JSON string. A JSON number can be used for values up to the safe maximum."
 					}
 				}
 			]
