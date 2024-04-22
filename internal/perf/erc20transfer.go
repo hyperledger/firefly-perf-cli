@@ -99,7 +99,7 @@ func (tc *erc20Transfer) RunOnce(iterationCount int) (string, error) {
 		},
 		"input": {
 			"to": "0x2989c0f1f7b9e861f521dbfc4069b74ab0ce12a2",
-			"amount": "1"
+			"amount": 1
 		},
 		"key": "%s",
 		"idempotencyKey": "%s"%s
