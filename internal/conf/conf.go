@@ -57,12 +57,6 @@ type RunnerConfig struct {
 	SubscriptionCoreOptions   *core.SubscriptionCoreOptions
 }
 
-type BatchConfig struct {
-	Enabled bool
-	Size    int
-	Timeout time.Duration
-}
-
 type PerformanceTestConfig struct {
 	LogLevel      string           `yaml:"logLevel" json:"logLevel"`
 	StackJSONPath string           `json:"stackJSONPath" yaml:"stackJSONPath"`

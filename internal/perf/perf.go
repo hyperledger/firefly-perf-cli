@@ -968,7 +968,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					case <-pr.ctx.Done():
 						return nil
 					case <-pr.wsReceivers[workerID]:
-						break
+						continue
 					}
 				}
 				if len(trackingIDs) > 0 {
@@ -1019,7 +1019,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	}
 }
 
-// TODO at the option of batching here!
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, subName string, err error) {
 	var sub core.Subscription
 	subPayload := core.Subscription{
