@@ -361,17 +361,6 @@ func (pr *perfRunner) Start() (err error) {
 		// Create contract sub and listener, if needed
 		var listenerID string
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomEthereumContract) {
-			assumedTokenCountPerSecond := 0
-			for _, testConf := range pr.cfg.Tests {
-				assumedTokenCountPerSecond += testConf.ActionsPerLoop * testConf.Workers
-			}
-
-			assumedTotalTokenRequired := (assumedTokenCountPerSecond * int(pr.cfg.Length.Seconds()) * 120 /*allow 20% extra*/) / 100
-
-			err := pr.premintERC20Tokens(nodeURL, pr.cfg.ContractOptions.Address, pr.cfg.SigningKey, assumedTotalTokenRequired)
-			if err != nil {
-				return err
-			}
 			listenerID, err = pr.createEthereumContractListener(nodeURL)
 			if err != nil {
 				return err
@@ -388,6 +377,17 @@ func (pr *perfRunner) Start() (err error) {
 		}
 
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestERC20TransferContract) {
+			assumedTokenCountPerSecond := 0
+			for _, testConf := range pr.cfg.Tests {
+				assumedTokenCountPerSecond += testConf.ActionsPerLoop * testConf.Workers
+			}
+
+			assumedTotalTokenRequired := (assumedTokenCountPerSecond * int(pr.cfg.Length.Seconds()) * 120 /*allow 20% extra*/) / 100
+
+			err := pr.premintERC20Tokens(nodeURL, pr.cfg.ContractOptions.Address, pr.cfg.SigningKey, assumedTotalTokenRequired)
+			if err != nil {
+				return err
+			}
 			listenerID, err = pr.createERC20ContractListener(nodeURL)
 			if err != nil {
 				return err
