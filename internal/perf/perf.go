@@ -361,6 +361,17 @@ func (pr *perfRunner) Start() (err error) {
 		// Create contract sub and listener, if needed
 		var listenerID string
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomEthereumContract) {
+			assumedTokenCountPerSecond := 0
+			for _, testConf := range pr.cfg.Tests {
+				assumedTokenCountPerSecond += testConf.ActionsPerLoop * testConf.Workers
+			}
+
+			assumedTotalTokenRequired := (assumedTokenCountPerSecond * int(pr.cfg.Length.Seconds()) * 120 /*allow 20% extra*/) / 100
+
+			err := pr.premintERC20Tokens(nodeURL, pr.cfg.ContractOptions.Address, pr.cfg.SigningKey, assumedTotalTokenRequired)
+			if err != nil {
+				return err
+			}
 			listenerID, err = pr.createEthereumContractListener(nodeURL)
 			if err != nil {
 				return err
@@ -1134,6 +1145,75 @@ func (pr *perfRunner) stopTrackingRequest(trackingID string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	delete(pr.msgTimeMap, trackingID)
+}
+
+func (pr *perfRunner) premintERC20Tokens(nodeURL string, contractAddress string, signingKeyAddress string, amount int) error {
+	log.Infof("Preparing minting request of %d tokens for address %s of ERC20 contract at %s", amount, signingKeyAddress, contractAddress)
+
+	idempotencyKey := fftypes.NewUUID().String()
+	invokeOptionsJSON := ""
+	payload := fmt.Sprintf(`{
+		"location": {
+			"address": "%s"
+		},
+		"method": {
+			"name": "mint",
+			"params": [
+				{
+					"name": "to",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address"
+						}
+					}
+				},
+				{
+					"name": "amount",
+					"schema": {
+						"type": "integer",
+						"details": {
+							"type": "uint256"
+						}
+					}
+				}
+			],
+			"returns": []
+		},
+		"input": {
+			"to": "%s",
+			"amount": %d
+		},
+		"key": "%s",
+		"idempotencyKey": "%s"%s
+	}`, contractAddress, signingKeyAddress, amount, signingKeyAddress, idempotencyKey, invokeOptionsJSON)
+
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/invoke")
+	if err != nil {
+		return err
+	}
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(payload).
+		SetResult(&responseBody).
+		SetError(&errResponse).
+		Post(fullPath)
+	if err != nil {
+		return err
+	}
+	if res.IsError() {
+		return fmt.Errorf("failed: %s", errResponse)
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Submitted minting request of %d tokens for address %s of ERC20 contract at %s, firefly request id: %s", amount, signingKeyAddress, contractAddress, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
+	return nil
 }
 
 func (pr *perfRunner) createERC20ContractListener(nodeURL string) (string, error) {
