@@ -9,6 +9,7 @@ The following is the list of current maintainers this repo:
 | Andrew Richardson | awrichar        | andrew.richardson@kaleido.io | Andrew.Richardson |
 | Alex Shorsher     | shorsher        | alex.shorsher@kaleido.io     | shorsher          |
 | David Echelberger | eberger727      | david.echelberger@kaleido.io | dech727           |
+| Chengxuan Xing    | Chengxuan       | chengxuan.xing@kaleido.io    | chengxuanxing     |
 
 This list is to be kept up to date as maintainers are added or removed.
 
