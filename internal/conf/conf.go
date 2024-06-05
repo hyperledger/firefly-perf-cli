@@ -24,6 +24,7 @@ import (
 
 	"github.com/hyperledger/firefly-common/pkg/fftypes"
 	"github.com/hyperledger/firefly-common/pkg/wsclient"
+	"github.com/hyperledger/firefly/pkg/core"
 )
 
 type RunnerConfig struct {
@@ -53,6 +54,7 @@ type RunnerConfig struct {
 	RampLength                time.Duration
 	SkipMintConfirmations     bool // deprecated
 	NoWaitSubmission          bool
+	SubscriptionCoreOptions   *core.SubscriptionCoreOptions
 }
 
 type PerformanceTestConfig struct {
@@ -66,27 +68,31 @@ type PerformanceTestConfig struct {
 }
 
 type InstanceConfig struct {
-	Name                      string           `yaml:"name" json:"name"`
-	Tests                     []TestCaseConfig `yaml:"tests" json:"tests"`
-	Length                    time.Duration    `yaml:"length" json:"length"`
-	MessageOptions            MessageOptions   `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
-	InvokeOptions             interface{}      `json:"invokeOptions,omitempty" yaml:"invokeOptions,omitempty"`
-	Sender                    int              `json:"sender" yaml:"sender"`
-	ManualNodeIndex           int              `json:"manualNodeIndex" yaml:"manualNodeIndex"`
-	Recipient                 *int             `json:"recipient,omitempty" yaml:"recipient,omitempty"`
-	SigningKey                string           `json:"signingKey,omitempty" yaml:"signingKey,omitempty"`
-	TokenOptions              TokenOptions     `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
-	ContractOptions           ContractOptions  `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
-	APIPrefix                 string           `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
-	FFNamespace               string           `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
-	FFNamespaceBasePath       string           `json:"namespaceBasePath,omitempty" yaml:"namespaceBasePath,omitempty"`
-	MaxTimePerAction          time.Duration    `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
-	MaxActions                int64            `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
-	RampLength                time.Duration    `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
-	SkipMintConfirmations     bool             `json:"skipMintConfirmations" yaml:"skipMintConfirmations"` // deprecated
-	NoWaitSubmission          bool             `json:"noWaitSubmission" yaml:"noWaitSubmission"`
-	DelinquentAction          string           `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
-	PerWorkerSigningKeyPrefix string           `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
+	Name                      string                        `yaml:"name" json:"name"`
+	Tests                     []TestCaseConfig              `yaml:"tests" json:"tests"`
+	Length                    time.Duration                 `yaml:"length" json:"length"`
+	MessageOptions            MessageOptions                `json:"messageOptions,omitempty" yaml:"messageOptions,omitempty"`
+	InvokeOptions             interface{}                   `json:"invokeOptions,omitempty" yaml:"invokeOptions,omitempty"`
+	Sender                    int                           `json:"sender" yaml:"sender"`
+	ManualNodeIndex           int                           `json:"manualNodeIndex" yaml:"manualNodeIndex"`
+	Recipient                 *int                          `json:"recipient,omitempty" yaml:"recipient,omitempty"`
+	SigningKey                string                        `json:"signingKey,omitempty" yaml:"signingKey,omitempty"`
+	TokenOptions              TokenOptions                  `json:"tokenOptions,omitempty" yaml:"tokenOptions,omitempty"`
+	ContractOptions           ContractOptions               `json:"contractOptions,omitempty" yaml:"contractOptions,omitempty"`
+	APIPrefix                 string                        `json:"apiPrefix,omitempty" yaml:"apiPrefix,omitempty"`
+	FFNamespace               string                        `json:"fireflyNamespace,omitempty" yaml:"fireflyNamespace,omitempty"`
+	FFNamespaceBasePath       string                        `json:"namespaceBasePath,omitempty" yaml:"namespaceBasePath,omitempty"`
+	MaxTimePerAction          time.Duration                 `json:"maxTimePerAction,omitempty" yaml:"maxTimePerAction,omitempty"`
+	MaxActions                int64                         `json:"maxActions,omitempty" yaml:"maxActions,omitempty"`
+	RampLength                time.Duration                 `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
+	SkipMintConfirmations     bool                          `json:"skipMintConfirmations" yaml:"skipMintConfirmations"` // deprecated
+	NoWaitSubmission          bool                          `json:"noWaitSubmission" yaml:"noWaitSubmission"`
+	DelinquentAction          string                        `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
+	PerWorkerSigningKeyPrefix string                        `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
+	SubscriptionCoreOptions   *core.SubscriptionCoreOptions `json:"subscriptionOptions,omitempty" yaml:"subscriptionOptions,omitempty"`
+}
+
+type SubscriptionOptions struct {
 }
 
 type TestCaseConfig struct {

@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -40,6 +41,7 @@ import (
 	"github.com/hyperledger/firefly/pkg/core"
 	dto "github.com/prometheus/client_model/go"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
 )
 
@@ -155,6 +157,11 @@ type inflightTest struct {
 
 var mintStartingBalance int
 
+type summary struct {
+	mutex        *sync.Mutex
+	rampSummary  int64
+	totalSummary int64
+}
 type perfRunner struct {
 	bfr      chan int
 	cfg      *conf.RunnerConfig
@@ -173,10 +180,9 @@ type perfRunner struct {
 	sendTime      *util.Latency
 	receiveTime   *util.Latency
 	totalTime     *util.Latency
-
-	msgTimeMap              map[string]*inflightTest
-	rampSummary             int64
-	totalSummary            int64
+	summary       summary
+	msgTimeMap    sync.Map
+	//msgTimeMap              map[string]*inflightTest
 	poolName                string
 	poolConnectorName       string
 	tagPrefix               string
@@ -242,15 +248,19 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 		totalTime:         &util.Latency{},
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
-		msgTimeMap:        make(map[string]*inflightTest),
-		totalSummary:      0,
-		wsReceivers:       wsReceivers,
-		wsUUID:            wsUUID,
-		nodeURLs:          config.NodeURLs,
-		subscriptionMap:   make(map[string]SubscriptionInfo),
-		daemon:            config.Daemon,
-		sender:            config.SenderURL,
-		totalWorkers:      totalWorkers,
+		msgTimeMap:        sync.Map{},
+		// msgTimeMap:        make(map[string]*inflightTest),
+		summary: summary{
+			totalSummary: 0,
+			mutex:        &sync.Mutex{},
+		},
+		wsReceivers:     wsReceivers,
+		wsUUID:          wsUUID,
+		nodeURLs:        config.NodeURLs,
+		subscriptionMap: make(map[string]SubscriptionInfo),
+		daemon:          config.Daemon,
+		sender:          config.SenderURL,
+		totalWorkers:    totalWorkers,
 	}
 
 	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
@@ -276,7 +286,6 @@ func (pr *perfRunner) Init() (err error) {
 	} else {
 		pr.client.SetBasicAuth(pr.cfg.WebSocket.AuthUsername, pr.cfg.WebSocket.AuthPassword)
 	}
-	// Set request retry with backoff
 	pr.client.
 		SetRetryCount(10).
 		// You can override initial retry wait time.
@@ -426,7 +435,11 @@ func (pr *perfRunner) Start() (err error) {
 		if err != nil {
 			return err
 		}
-		go pr.eventLoop(pr.nodeURLs[i], wsconn)
+		if pr.cfg.SubscriptionCoreOptions != nil && pr.cfg.SubscriptionCoreOptions.Batch != nil && *pr.cfg.SubscriptionCoreOptions.Batch {
+			go pr.batchEventLoop(pr.nodeURLs[i], wsconn)
+		} else {
+			go pr.eventLoop(pr.nodeURLs[i], wsconn)
+		}
 	}
 
 	id := 0
@@ -545,7 +558,7 @@ perfLoop:
 		}
 	}
 
-	measuredActions := pr.totalSummary
+	measuredActions := pr.summary.totalSummary
 	measuredTime := time.Since(time.Unix(pr.startTime, 0))
 
 	testNames := make([]string, len(pr.cfg.Tests))
@@ -620,6 +633,178 @@ func (pr *perfRunner) cleanup() {
 
 }
 
+func (pr *perfRunner) filterEvent(event core.EventDelivery, url string) (workerID int, err error) {
+	workerID = -1
+
+	switch event.Type {
+	case core.EventTypeBlockchainEventReceived:
+		if event.BlockchainEvent == nil {
+			log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
+			return workerID, fmt.Errorf("blockchain event not found for event: %s", event.ID)
+		}
+		var value string
+		switch event.BlockchainEvent.Source {
+		case "ethereum":
+			value = event.BlockchainEvent.Output.GetString("value")
+		case "fabric":
+			value = event.BlockchainEvent.Output.GetString("Owner")
+		}
+		workerID, err = strconv.Atoi(value)
+		if err != nil {
+			log.Errorf("Could not parse event value: %s", err)
+			b, _ := json.Marshal(&event)
+			log.Infof("Full event: %s", b)
+		} else {
+			log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
+		}
+	case core.EventTypeTransferConfirmed:
+		if pr.cfg.TokenOptions.SupportsURI {
+			// If there's a URI in the event we'll have put the worker ID there
+			uriElements := strings.Split(event.TokenTransfer.URI, "//")
+			if len(uriElements) == 2 {
+				workerID, err = strconv.Atoi(uriElements[1])
+				if err != nil {
+					log.Errorf("Could not parse event value: %s", err)
+					b, _ := json.Marshal(&event)
+					log.Infof("Full event: %s", b)
+				} else {
+					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
+				}
+			} else {
+				log.Errorf("no URI in token transfer event: %s")
+				b, _ := json.Marshal(&event)
+				log.Errorf("Full event: %s", b)
+
+				incompleteEventsCounter.Inc()
+
+				if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
+				}
+			}
+		}
+	default:
+		workerIDFromTag := ""
+
+		if event.Type.String() == "protocol_error" {
+			// Can't do anything but shut down gracefully
+			log.Error("Protocol error event - shutting down")
+			pr.shutdown()
+		} else {
+			subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
+			if !ok {
+				return workerID, fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
+			}
+			switch subInfo.Job {
+			case conf.PerfTestBlobBroadcast, conf.PerfTestBlobPrivateMsg:
+				workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
+			default:
+				workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
+			}
+
+			workerID, err = strconv.Atoi(workerIDFromTag)
+			if err != nil {
+				log.Errorf("Could not parse message tag: %s", err)
+				b, _ := json.Marshal(&event)
+				log.Infof("Full event: %s", b)
+			}
+
+			var dataID *fftypes.UUID
+			if len(event.Message.Data) > 0 {
+				dataID = event.Message.Data[0].ID
+			}
+			log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, url, workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, dataID)
+		}
+	}
+
+	return workerID, nil
+}
+
+func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
+	log.Infof("Batch Event loop started for %s...", nodeURL)
+	for {
+		log.Trace("blocking until wsconn.Receive or ctx.Done()")
+		select {
+		// Wait to receive websocket event
+		case msgBytes, ok := <-wsconn.Receive():
+			if !ok {
+				log.Errorf("Error receiving websocket")
+				return
+			}
+			log.Trace("received from websocket")
+
+			// Handle websocket event
+			var batch core.WSEventBatch
+			json.Unmarshal(msgBytes, &batch)
+
+			if pr.cfg.LogEvents {
+				log.Info("Batch: ", string(msgBytes))
+			}
+
+			g, _ := errgroup.WithContext(pr.ctx)
+			g.SetLimit(-1)
+
+			for _, event := range batch.Events {
+				thisEvent := event
+				g.Go(func() error {
+					if pr.cfg.LogEvents {
+						eventJSON, _ := json.Marshal(thisEvent)
+						log.Info("Event: ", string(eventJSON))
+					}
+
+					receivedEventsCounter.Inc()
+
+					workerID, err := pr.filterEvent(*thisEvent, wsconn.URL())
+					if err != nil {
+						return err
+					}
+
+					pr.recordCompletedAction()
+					// Release worker so it can continue to its next task
+					if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
+						if workerID >= 0 {
+							// No need for locking as channel have built in support
+							pr.wsReceivers[workerID] <- nodeURL
+						}
+					}
+					return nil
+				})
+			}
+
+			// Wait for all go routines to complete
+			// The first non-nil go routine will be returned
+			// and we will return the error
+			log.Debug("Waiting for events from websocket to be handled")
+			if err := g.Wait(); err != nil {
+				return err
+			}
+			log.Debug("All events from websocket handled")
+
+			// We have completed all the go routines
+			// and can ack the batch
+			// Ack batch event
+			ack := &core.WSAck{
+				WSActionBase: core.WSActionBase{
+					Type: core.WSClientActionAck,
+				},
+				ID: batch.ID,
+				Subscription: &core.SubscriptionRef{
+					ID: batch.Subscription.ID,
+				},
+			}
+			ackJSON, _ := json.Marshal(ack)
+			wsconn.Send(context.Background(), ackJSON)
+
+			pr.summary.mutex.Lock()
+			pr.calculateCurrentTps(true)
+			pr.summary.mutex.Unlock()
+		case <-pr.ctx.Done():
+			log.Warnf("Run loop exiting (context cancelled)")
+			wsconn.Close()
+			return
+		}
+	}
+}
+
 func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err error) {
 	log.Infof("Event loop started for %s...", nodeURL)
 	for {
@@ -643,86 +828,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 				fmt.Println("Event: ", string(msgBytes))
 			}
 
-			workerID := -1
-
-			switch event.Type {
-			case core.EventTypeBlockchainEventReceived:
-				if event.BlockchainEvent == nil {
-					log.Errorf("\nBlockchain event not found --- Event ID: %s\n\t%d --- Ref: %s", event.ID.String(), event.Reference)
-					return fmt.Errorf("blockchain event not found for event: %s", event.ID)
-				}
-				var value string
-				switch event.BlockchainEvent.Source {
-				case "ethereum":
-					value = event.BlockchainEvent.Output.GetString("value")
-				case "fabric":
-					value = event.BlockchainEvent.Output.GetString("Owner")
-				}
-				workerID, err = strconv.Atoi(value)
-				if err != nil {
-					log.Errorf("Could not parse event value: %s", err)
-					b, _ := json.Marshal(&event)
-					log.Infof("Full event: %s", b)
-				} else {
-					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
-				}
-			case core.EventTypeTransferConfirmed:
-				if pr.cfg.TokenOptions.SupportsURI {
-					// If there's a URI in the event we'll have put the worker ID there
-					uriElements := strings.Split(event.TokenTransfer.URI, "//")
-					if len(uriElements) == 2 {
-						workerID, err = strconv.Atoi(uriElements[1])
-						if err != nil {
-							log.Errorf("Could not parse event value: %s", err)
-							b, _ := json.Marshal(&event)
-							log.Infof("Full event: %s", b)
-						} else {
-							log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Reference)
-						}
-					} else {
-						log.Errorf("no URI in token transfer event: %s")
-						b, _ := json.Marshal(&event)
-						log.Errorf("Full event: %s", b)
-
-						incompleteEventsCounter.Inc()
-
-						if pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-							log.Panic(fmt.Errorf("error - no URI found in token_transfer_confirmed event"))
-						}
-					}
-				}
-			default:
-				workerIDFromTag := ""
-
-				if event.Type.String() == "protocol_error" {
-					// Can't do anything but shut down gracefully
-					log.Error("Protocol error event - shutting down")
-					pr.shutdown()
-				} else {
-					subInfo, ok := pr.subscriptionMap[event.Subscription.ID.String()]
-					if !ok {
-						return fmt.Errorf("received an event on unknown subscription: %s", event.Subscription.ID)
-					}
-					switch subInfo.Job {
-					case conf.PerfTestBlobBroadcast, conf.PerfTestBlobPrivateMsg:
-						workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, fmt.Sprintf("blob_%s_", pr.tagPrefix), "")
-					default:
-						workerIDFromTag = strings.ReplaceAll(event.Message.Header.Tag, pr.tagPrefix+"_", "")
-					}
-
-					workerID, err = strconv.Atoi(workerIDFromTag)
-					if err != nil {
-						log.Errorf("Could not parse message tag: %s", err)
-						b, _ := json.Marshal(&event)
-						log.Infof("Full event: %s", b)
-					}
-
-					var dataID *fftypes.UUID
-					if len(event.Message.Data) > 0 {
-						dataID = event.Message.Data[0].ID
-					}
-					log.Infof("\n\t%d - Received %s \n\t%d --- Event ID: %s\n\t%d --- Message ID: %s\n\t%d --- Data ID: %s", workerID, wsconn.URL(), workerID, event.ID.String(), workerID, event.Message.Header.ID.String(), workerID, dataID)
-				}
+			workerID, err := pr.filterEvent(event, wsconn.URL())
+			if err != nil {
+				return err
 			}
 
 			// Ack websocket event
@@ -744,6 +852,9 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 					pr.wsReceivers[workerID] <- nodeURL
 				}
 			}
+			pr.summary.mutex.Lock()
+			pr.calculateCurrentTps(true)
+			pr.summary.mutex.Unlock()
 		case <-pr.ctx.Done():
 			log.Warnf("Run loop exiting (context cancelled)")
 			wsconn.Close()
@@ -857,7 +968,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					case <-pr.ctx.Done():
 						return nil
 					case <-pr.wsReceivers[workerID]:
-						break
+						continue
 					}
 				}
 				if len(trackingIDs) > 0 {
@@ -872,7 +983,6 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 			if pr.cfg.NoWaitSubmission {
 				log.Infof("%d <-- %s Finished (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
-
 			} else {
 				eventReceivingDurationPerLoop := time.Since(sentTime)
 				eventReceivingSecondsPerLoop = eventReceivingDurationPerLoop.Seconds()
@@ -911,19 +1021,12 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 
 func (pr *perfRunner) createMsgConfirmSub(nodeURL, name, tag string) (subID string, subName string, err error) {
 	var sub core.Subscription
-	readAhead := uint16(len(pr.wsReceivers))
-	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      name,
 			Namespace: pr.cfg.FFNamespace,
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options: pr.constructSubscriptionsOptions(),
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeMessageConfirmed.String(),
 			Message: core.MessageFilter{
@@ -1025,14 +1128,15 @@ func getFFClient(node string) *resty.Client {
 }
 
 func (pr *perfRunner) detectDelinquentMsgs() bool {
-	mutex.Lock()
 	delinquentMsgs := make(map[string]time.Time)
-	for trackingID, inflight := range pr.msgTimeMap {
+	pr.msgTimeMap.Range(func(k, v interface{}) bool {
+		trackingID := k.(string)
+		inflight := v.(*inflightTest)
 		if time.Since(inflight.time).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
 			delinquentMsgs[trackingID] = inflight.time
 		}
-	}
-	mutex.Unlock()
+		return true
+	})
 
 	dw, err := json.MarshalIndent(delinquentMsgs, "", "  ")
 	if err != nil {
@@ -1094,28 +1198,25 @@ func (pr *perfRunner) markTestInFlight(tc TestCase, trackingID string) {
 	mutex.Lock()
 	defer mutex.Unlock()
 	if len(trackingID) > 0 {
-		pr.msgTimeMap[trackingID] = &inflightTest{
+		pr.msgTimeMap.Store(trackingID, &inflightTest{
 			testCase: tc,
 			time:     time.Now(),
-		}
+		})
 	}
 }
 
 func (pr *perfRunner) recordCompletedAction() {
 	if pr.ramping() {
-		pr.rampSummary++
+		_ = atomic.AddInt64(&pr.summary.rampSummary, 1) // increment atomically
 	} else {
-		pr.totalSummary++
+		pr.summary.totalSummary++
+		_ = atomic.AddInt64(&pr.summary.totalSummary, 1) // increment atomically
 	}
-	mutex.Lock()
-	defer mutex.Unlock()
-	pr.calculateCurrentTps(true)
 }
 
 func (pr *perfRunner) stopTrackingRequest(trackingID string) {
-	mutex.Lock()
-	defer mutex.Unlock()
-	delete(pr.msgTimeMap, trackingID)
+	log.Debugf("Deleting tracking request: %s", trackingID)
+	pr.msgTimeMap.Delete(trackingID)
 }
 
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
@@ -1251,8 +1352,6 @@ func (pr *perfRunner) deleteContractListener(nodeURL string, listenerID string) 
 func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID string, subName string, err error) {
 	log.Infof("Creating contract subscription %s: %s", nodeURL, fmt.Sprintf("contracts_%s", pr.tagPrefix))
 	var sub core.Subscription
-	readAhead := uint16(len(pr.wsReceivers))
-	firstEvent := core.SubOptsFirstEventNewest
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      fmt.Sprintf("contracts_%s", pr.tagPrefix),
@@ -1264,12 +1363,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 				Listener: listenerID,
 			},
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options:   pr.constructSubscriptionsOptions(),
 		Transport: TRANSPORT_TYPE,
 	}
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
@@ -1295,27 +1389,46 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 	return sub.ID.String(), sub.Name, nil
 }
 
-func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName string, err error) {
-	log.Infof("Creating token mint subscription %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
+func (pr *perfRunner) constructSubscriptionsOptions() core.SubscriptionOptions {
 	readAhead := uint16(len(pr.wsReceivers))
 	firstEvent := core.SubOptsFirstEventNewest
+	// Default options
+	options := core.SubscriptionOptions{
+		SubscriptionCoreOptions: core.SubscriptionCoreOptions{
+			ReadAhead:  &readAhead,
+			FirstEvent: &firstEvent,
+		},
+	}
+	if pr.cfg.SubscriptionCoreOptions != nil {
+		options.SubscriptionCoreOptions = *pr.cfg.SubscriptionCoreOptions
+		if options.SubscriptionCoreOptions.ReadAhead == nil {
+			// ReadAhead not specified in config, so default
+			options.SubscriptionCoreOptions.ReadAhead = &readAhead
+		}
+		if options.SubscriptionCoreOptions.FirstEvent == nil {
+			// FirstEvent not specified in config, so default
+			options.SubscriptionCoreOptions.FirstEvent = &firstEvent
+		}
+	}
+
+	return options
+}
+
+func (pr *perfRunner) createTokenMintSub(nodeURL string) (subID string, subName string, err error) {
+	log.Infof("Creating token mint subscription %s: %s", nodeURL, fmt.Sprintf("mint_%s", pr.tagPrefix))
 	var sub core.Subscription
 	subPayload := core.Subscription{
 		SubscriptionRef: core.SubscriptionRef{
 			Name:      fmt.Sprintf("mint_%s", pr.tagPrefix),
 			Namespace: pr.cfg.FFNamespace,
 		},
-		Options: core.SubscriptionOptions{
-			SubscriptionCoreOptions: core.SubscriptionCoreOptions{
-				ReadAhead:  &readAhead,
-				FirstEvent: &firstEvent,
-			},
-		},
+		Options: pr.constructSubscriptionsOptions(),
 		Filter: core.SubscriptionFilter{
 			Events: core.EventTypeTransferConfirmed.String(),
 		},
 		Transport: TRANSPORT_TYPE,
 	}
+
 	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "subscriptions")
 	if err != nil {
 		return "", "", err
@@ -1391,10 +1504,10 @@ func (pr *perfRunner) calculateCurrentTps(logValue bool) float64 {
 	var startTime int64
 	var measuredActions int64
 	if pr.ramping() {
-		measuredActions = pr.rampSummary
+		measuredActions = pr.summary.rampSummary
 		startTime = pr.startRampTime
 	} else {
-		measuredActions = pr.totalSummary
+		measuredActions = pr.summary.totalSummary
 		startTime = pr.startTime
 	}
 	duration := time.Since(time.Unix(startTime, 0)).Seconds()
