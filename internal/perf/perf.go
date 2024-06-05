@@ -304,7 +304,7 @@ func (pr *perfRunner) Init() (err error) {
 						return false
 					}
 					// Retry for all other errors
-					log.Warnf("Retrying HTTP request. Status: '%v' Response: '%s' Error: '%v'", r.Status(), r.Body(), r.Error())
+					log.Warnf("Retrying HTTP request. Status: '%v' Request: '%s' '%s' Response: '%s' Error: '%v'", r.Status(), r.Request.Method, r.Request.URL, r.Body(), r.Error())
 					return true
 				}
 				return false
