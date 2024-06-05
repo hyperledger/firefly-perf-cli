@@ -102,8 +102,8 @@ func (hs *HttpServer) gracefulShutdown() {
 }
 
 func (hs *HttpServer) Shutdown() {
-	log.Warn("Server shutting down in 30s")
-	time.Sleep(30 * time.Second)
+	log.Warn("Server shutting down in 5s")
+	time.Sleep(5 * time.Second)
 
 	// We received an interrupt signal, shut down.
 	if err := hs.srv.Shutdown(context.Background()); err != nil {

@@ -45,6 +45,9 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const workerPrefix = "worker-"
+const preparePrefix = "prep-"
+
 var mutex = &sync.Mutex{}
 var limiter *rate.Limiter
 var TRANSPORT_TYPE = "websockets"
@@ -182,20 +185,23 @@ type perfRunner struct {
 	totalTime     *util.Latency
 	summary       summary
 	msgTimeMap    sync.Map
-	//msgTimeMap              map[string]*inflightTest
-	poolName                string
-	poolConnectorName       string
-	tagPrefix               string
-	wsconns                 []wsclient.WSClient
-	wsReceivers             []chan string
-	wsUUID                  fftypes.UUID
-	nodeURLs                []string
-	subscriptionMap         map[string]SubscriptionInfo
-	listenerIDsForNodes     map[string][]string
-	subscriptionIDsForNodes map[string][]string
-	daemon                  bool
-	sender                  string
-	totalWorkers            int
+
+	rampSummary                int64
+	totalSummary               int64
+	poolName                   string
+	poolConnectorName          string
+	tagPrefix                  string
+	wsconns                    []wsclient.WSClient
+	wsReceivers                map[string]chan string
+	eventPrefixForCurrentStage string
+	wsUUID                     fftypes.UUID
+	nodeURLs                   []string
+	subscriptionMap            map[string]SubscriptionInfo
+	listenerIDsForNodes        map[string][]string
+	subscriptionIDsForNodes    map[string][]string
+	daemon                     bool
+	sender                     string
+	totalWorkers               int
 }
 
 type SubscriptionInfo struct {
@@ -219,9 +225,10 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 	}
 
 	// Create channel based dispatch for workers
-	var wsReceivers []chan string
+	wsReceivers := make(map[string]chan string)
 	for i := 0; i < totalWorkers; i++ {
-		wsReceivers = append(wsReceivers, make(chan string))
+		preFixedWorkerID := fmt.Sprintf("%s%d", workerPrefix, i)
+		wsReceivers[preFixedWorkerID] = make(chan string)
 	}
 
 	wsUUID := *fftypes.NewUUID()
@@ -249,18 +256,18 @@ func New(config *conf.RunnerConfig, reportBuilder *util.Report) PerfRunner {
 		poolConnectorName: config.TokenOptions.TokenPoolConnectorName,
 		tagPrefix:         fmt.Sprintf("perf_%s", wsUUID.String()),
 		msgTimeMap:        sync.Map{},
-		// msgTimeMap:        make(map[string]*inflightTest),
 		summary: summary{
 			totalSummary: 0,
 			mutex:        &sync.Mutex{},
 		},
-		wsReceivers:     wsReceivers,
-		wsUUID:          wsUUID,
-		nodeURLs:        config.NodeURLs,
-		subscriptionMap: make(map[string]SubscriptionInfo),
-		daemon:          config.Daemon,
-		sender:          config.SenderURL,
-		totalWorkers:    totalWorkers,
+		wsReceivers:                wsReceivers,
+		eventPrefixForCurrentStage: workerPrefix, // most test case currently doesn't have a prep stage, so default to test running stage prefix
+		wsUUID:                     wsUUID,
+		nodeURLs:                   config.NodeURLs,
+		subscriptionMap:            make(map[string]SubscriptionInfo),
+		daemon:                     config.Daemon,
+		sender:                     config.SenderURL,
+		totalWorkers:               totalWorkers,
 	}
 
 	wsconns := make([]wsclient.WSClient, len(config.NodeURLs))
@@ -325,6 +332,7 @@ func (pr *perfRunner) Start() (err error) {
 			pr.poolName = pr.cfg.TokenOptions.ExistingPoolName
 		}
 	}
+	prepEventTrackingID := ""
 
 	log.Infof("Running test:\n%+v", pr.cfg)
 	pr.listenerIDsForNodes = make(map[string][]string)
@@ -385,6 +393,37 @@ func (pr *perfRunner) Start() (err error) {
 			}
 		}
 
+		if containsTargetTest(pr.cfg.Tests, conf.PerfTestERC20TransferContract) {
+			pr.eventPrefixForCurrentStage = preparePrefix
+			assumedTokenCountPerSecond := 0
+			for _, testConf := range pr.cfg.Tests {
+				assumedTokenCountPerSecond += testConf.ActionsPerLoop * ((1 + testConf.Workers) * testConf.Workers / 2)
+			}
+
+			assumedTotalTokenRequired := (assumedTokenCountPerSecond * int(pr.cfg.Length.Seconds()) * 120 /*allow 20% extra*/) / 100
+
+			listenerID, err = pr.createERC20ContractListener(nodeURL)
+			if err != nil {
+				return err
+			}
+			subID, subName, err := pr.createContractsSub(nodeURL, listenerID)
+			if err != nil {
+				return err
+			}
+			pr.subscriptionMap[subID] = SubscriptionInfo{
+				NodeURL: nodeURL,
+				Name:    subName,
+				Job:     conf.PerfTestERC20TransferContract,
+			}
+			err = pr.premintERC20Tokens(nodeURL, pr.cfg.ContractOptions.Address, pr.cfg.SigningKey, assumedTotalTokenRequired)
+			if err != nil {
+				return err
+			}
+			prepEventTrackingID = fmt.Sprintf("%s%d", pr.eventPrefixForCurrentStage, assumedTotalTokenRequired)
+			pr.wsReceivers[prepEventTrackingID] = make(chan string)
+
+		}
+
 		if containsTargetTest(pr.cfg.Tests, conf.PerfTestCustomFabricContract) {
 			listenerID, err = pr.createFabricContractListener(nodeURL)
 			if err != nil {
@@ -442,6 +481,13 @@ func (pr *perfRunner) Start() (err error) {
 		}
 	}
 
+	if prepEventTrackingID != "" && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
+		log.Infof("Waiting for tracking %s", prepEventTrackingID)
+		<-pr.wsReceivers[prepEventTrackingID]
+		log.Infof("Prep action completed")
+		pr.eventPrefixForCurrentStage = workerPrefix
+	}
+
 	id := 0
 	for _, test := range pr.cfg.Tests {
 		log.Infof("Starting %d workers for case \"%s\"", test.Workers, test.Name)
@@ -457,6 +503,8 @@ func (pr *perfRunner) Start() (err error) {
 				tc = newTokenMintTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomEthereumContract:
 				tc = newCustomEthereumTestWorker(pr, id, test.ActionsPerLoop)
+			case conf.PerfTestERC20TransferContract:
+				tc = newERC20TransferTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestCustomFabricContract:
 				tc = newCustomFabricTestWorker(pr, id, test.ActionsPerLoop)
 			case conf.PerfTestBlobBroadcast:
@@ -538,7 +586,7 @@ perfLoop:
 	if pr.cfg.NoWaitSubmission {
 		eventsCount := getMetricVal(receivedEventsCounter)
 		submissionCount := getMetricVal(totalActionsCounter)
-		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 30s", eventsCount, submissionCount)
+		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 5s", eventsCount, submissionCount)
 		for {
 			if eventsCount == submissionCount {
 				break
@@ -548,7 +596,7 @@ perfLoop:
 			}
 
 			// Check if more than 1 minute has passed
-			if time.Since(tallyStart) > 30*time.Second {
+			if time.Since(tallyStart) > 5*time.Second {
 				log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
 				break
 			}
@@ -580,8 +628,8 @@ perfLoop:
 	// we sleep on shutdown / completion to allow for Prometheus metrics to be scraped one final time
 	// After 30 seconds workers should be completed, so we check for delinquent messages
 	// one last time so metrics are up-to-date
-	log.Warn("Runner stopping in 30s")
-	time.Sleep(30 * time.Second)
+	log.Warn("Runner stopping in 5s")
+	time.Sleep(5 * time.Second)
 	pr.detectDelinquentMsgs()
 
 	log.Info("Cleaning up")
@@ -762,8 +810,9 @@ func (pr *perfRunner) batchEventLoop(nodeURL string, wsconn wsclient.WSClient) (
 					// Release worker so it can continue to its next task
 					if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
 						if workerID >= 0 {
+							preFixedWorkerID := fmt.Sprintf("%s%d", pr.eventPrefixForCurrentStage, workerID)
 							// No need for locking as channel have built in support
-							pr.wsReceivers[workerID] <- nodeURL
+							pr.wsReceivers[preFixedWorkerID] <- nodeURL
 						}
 					}
 					return nil
@@ -849,7 +898,8 @@ func (pr *perfRunner) eventLoop(nodeURL string, wsconn wsclient.WSClient) (err e
 			// Release worker so it can continue to its next task
 			if !pr.stopping && !pr.cfg.NoWaitSubmission && !pr.cfg.SkipMintConfirmations {
 				if workerID >= 0 {
-					pr.wsReceivers[workerID] <- nodeURL
+					preFixedWorkerID := fmt.Sprintf("%s%d", pr.eventPrefixForCurrentStage, workerID)
+					pr.wsReceivers[preFixedWorkerID] <- nodeURL
 				}
 			}
 			pr.summary.mutex.Lock()
@@ -874,6 +924,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 	idType := tc.IDType()
 	testName := tc.Name()
 	workerID := tc.WorkerID()
+	preFixedWorkerID := fmt.Sprintf("%s%d", workerPrefix, workerID)
 
 	loop := 0
 	for {
@@ -913,7 +964,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				actionCount := actionsCompleted
 				go func() {
 					trackingID, err := tc.RunOnce(actionCount)
-					log.Debugf("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
+					log.Infof("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
 					actionResponses <- &ActionResponse{
 						trackingID: trackingID,
 						err:        err,
@@ -967,7 +1018,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 					select {
 					case <-pr.ctx.Done():
 						return nil
-					case <-pr.wsReceivers[workerID]:
+					case <-pr.wsReceivers[preFixedWorkerID]:
 						continue
 					}
 				}
@@ -1219,6 +1270,159 @@ func (pr *perfRunner) stopTrackingRequest(trackingID string) {
 	pr.msgTimeMap.Delete(trackingID)
 }
 
+func (pr *perfRunner) premintERC20Tokens(nodeURL string, contractAddress string, signingKeyAddress string, amount int) error {
+	log.Infof("Preparing minting request of %d tokens for address %s of ERC20 contract at %s", amount, signingKeyAddress, contractAddress)
+
+	idempotencyKey := fftypes.NewUUID().String()
+	invokeOptionsJSON := ""
+	payload := fmt.Sprintf(`{
+		"location": {
+			"address": "%s"
+		},
+		"method": {
+			"name": "mint",
+			"params": [
+				{
+					"name": "to",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address"
+						}
+					}
+				},
+				{
+					"name": "amount",
+					"schema": {
+						"type": "integer",
+						"details": {
+							"type": "uint256"
+						}
+					}
+				}
+			],
+			"returns": []
+		},
+		"input": {
+			"to": "%s",
+			"amount": %d
+		},
+		"key": "%s",
+		"idempotencyKey": "%s"%s
+	}`, contractAddress, signingKeyAddress, amount, signingKeyAddress, idempotencyKey, invokeOptionsJSON)
+
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/invoke")
+	if err != nil {
+		return err
+	}
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(payload).
+		SetResult(&responseBody).
+		SetError(&errResponse).
+		Post(fullPath)
+	if err != nil {
+		return err
+	}
+	if res.IsError() {
+		return fmt.Errorf("failed: %s", errResponse)
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Submitted minting request of %d tokens for address %s of ERC20 contract at %s, firefly request id: %s", amount, signingKeyAddress, contractAddress, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
+	return nil
+}
+
+func (pr *perfRunner) createERC20ContractListener(nodeURL string) (string, error) {
+	subPayload := fmt.Sprintf(`{
+		"location": {
+			"address": "%s"
+		},
+		"event": {
+			"name": "Transfer",
+			"description": "",
+			"params": [
+				{
+					"name": "from",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address",
+							"internalType": "address",
+							"indexed": true
+						},
+						"description": "A hex encoded set of bytes, with an optional '0x' prefix"
+					}
+				},
+				{
+					"name": "to",
+					"schema": {
+						"type": "string",
+						"details": {
+							"type": "address",
+							"internalType": "address",
+							"indexed": true
+						},
+						"description": "A hex encoded set of bytes, with an optional '0x' prefix"
+					}
+				},
+				{
+					"name": "value",
+					"schema": {
+						"oneOf": [
+							{
+								"type": "string"
+							},
+							{
+								"type": "integer"
+							}
+						],
+						"details": {
+							"type": "uint256",
+							"internalType": "uint256"
+						},
+						"description": "An integer. You are recommended to use a JSON string. A JSON number can be used for values up to the safe maximum."
+					}
+				}
+			]
+		},
+		"topic": "%s"
+	}`, pr.cfg.ContractOptions.Address, fftypes.NewUUID())
+
+	var errResponse fftypes.RESTError
+	var responseBody map[string]interface{}
+	fullPath, err := url.JoinPath(nodeURL, pr.cfg.FFNamespacePath, "contracts/listeners")
+	if err != nil {
+		return "", err
+	}
+	res, err := pr.client.R().
+		SetHeaders(map[string]string{
+			"Accept":       "application/json",
+			"Content-Type": "application/json",
+		}).
+		SetBody(subPayload).
+		SetResult(&responseBody).
+		SetError(&errResponse).
+		Post(fullPath)
+	if err != nil {
+		return "", err
+	}
+	if res.IsError() {
+		return "", fmt.Errorf("failed: %s", errResponse)
+	}
+	id := responseBody["id"].(string)
+	log.Infof("Created contract listener on %s: %s", nodeURL, id)
+	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
+
+	return id, nil
+}
+
 func (pr *perfRunner) createEthereumContractListener(nodeURL string) (string, error) {
 	subPayload := fmt.Sprintf(`{
 		"location": {
@@ -1390,7 +1594,7 @@ func (pr *perfRunner) createContractsSub(nodeURL, listenerID string) (subID stri
 }
 
 func (pr *perfRunner) constructSubscriptionsOptions() core.SubscriptionOptions {
-	readAhead := uint16(len(pr.wsReceivers))
+	readAhead := uint16(pr.totalWorkers)
 	firstEvent := core.SubOptsFirstEventNewest
 	// Default options
 	options := core.SubscriptionOptions{
