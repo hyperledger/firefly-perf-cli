@@ -186,8 +186,6 @@ type perfRunner struct {
 	summary       summary
 	msgTimeMap    sync.Map
 
-	rampSummary                int64
-	totalSummary               int64
 	poolName                   string
 	poolConnectorName          string
 	tagPrefix                  string
@@ -586,7 +584,7 @@ perfLoop:
 	if pr.cfg.NoWaitSubmission {
 		eventsCount := getMetricVal(receivedEventsCounter)
 		submissionCount := getMetricVal(totalActionsCounter)
-		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 5s", eventsCount, submissionCount)
+		log.Infof("<No wait submission mode> Wait for the event count %f to reach request sent count %f, within 30s", eventsCount, submissionCount)
 		for {
 			if eventsCount == submissionCount {
 				break
@@ -596,7 +594,7 @@ perfLoop:
 			}
 
 			// Check if more than 1 minute has passed
-			if time.Since(tallyStart) > 5*time.Second {
+			if time.Since(tallyStart) > 30*time.Second {
 				log.Errorf("The number of events received %f doesn't tally up to the number of requests sent %f after %s.", eventsCount, submissionCount, time.Since(time.Unix(pr.startTime, 0)))
 				break
 			}
@@ -699,9 +697,9 @@ func (pr *perfRunner) filterEvent(event core.EventDelivery, url string) (workerI
 		}
 		workerID, err = strconv.Atoi(value)
 		if err != nil {
-			log.Errorf("Could not parse event value: %s", err)
+			log.Errorf("Could not extract worker ID from event value: %s due to %+v", value, err)
 			b, _ := json.Marshal(&event)
-			log.Infof("Full event: %s", b)
+			log.Debugf("Full event: %s", b)
 		} else {
 			log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
 		}
@@ -712,9 +710,9 @@ func (pr *perfRunner) filterEvent(event core.EventDelivery, url string) (workerI
 			if len(uriElements) == 2 {
 				workerID, err = strconv.Atoi(uriElements[1])
 				if err != nil {
-					log.Errorf("Could not parse event value: %s", err)
+					log.Errorf("Could not extract worker ID from uri: %s due to %+v", uriElements[1], err)
 					b, _ := json.Marshal(&event)
-					log.Infof("Full event: %s", b)
+					log.Debugf("Full event: %s", b)
 				} else {
 					log.Infof("\n\t%d - Received from %s\n\t%d --- Event ID: %s\n\t%d --- Ref: %s", workerID, url, workerID, event.ID.String(), workerID, event.Reference)
 				}
@@ -751,9 +749,9 @@ func (pr *perfRunner) filterEvent(event core.EventDelivery, url string) (workerI
 
 			workerID, err = strconv.Atoi(workerIDFromTag)
 			if err != nil {
-				log.Errorf("Could not parse message tag: %s", err)
+				log.Errorf("Could not extract worker ID from message tag: %s due to %+v", workerIDFromTag, err)
 				b, _ := json.Marshal(&event)
-				log.Infof("Full event: %s", b)
+				log.Debugf("Full event: %s", b)
 			}
 
 			var dataID *fftypes.UUID
@@ -964,7 +962,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 				actionCount := actionsCompleted
 				go func() {
 					trackingID, err := tc.RunOnce(actionCount)
-					log.Infof("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
+					log.Debugf("%d --> %s action %d sent after %f seconds", workerID, testName, actionCount, time.Since(startTime).Seconds())
 					actionResponses <- &ActionResponse{
 						trackingID: trackingID,
 						err:        err,
@@ -1046,7 +1044,7 @@ func (pr *perfRunner) runLoop(tc TestCase) error {
 			}
 
 			if histErr == nil {
-				log.Infof("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
+				log.Debugf("%d <-- %s Emmiting (loop=%d) after %f seconds", workerID, testName, loop, secondsPerLoop)
 
 				hist.Observe(secondsPerLoop)
 			}
