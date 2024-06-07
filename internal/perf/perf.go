@@ -1332,8 +1332,6 @@ func (pr *perfRunner) premintERC20Tokens(nodeURL string, contractAddress string,
 	}
 	id := responseBody["id"].(string)
 	log.Infof("Submitted minting request of %d tokens for address %s of ERC20 contract at %s, firefly request id: %s", amount, signingKeyAddress, contractAddress, id)
-	pr.listenerIDsForNodes[nodeURL] = append(pr.listenerIDsForNodes[nodeURL], id)
-
 	return nil
 }
 
