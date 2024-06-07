@@ -92,9 +92,6 @@ type InstanceConfig struct {
 	SubscriptionCoreOptions   *core.SubscriptionCoreOptions `json:"subscriptionOptions,omitempty" yaml:"subscriptionOptions,omitempty"`
 }
 
-type SubscriptionOptions struct {
-}
-
 type TestCaseConfig struct {
 	Name           fftypes.FFEnum `json:"name" yaml:"name"`
 	Workers        int            `json:"workers" yaml:"workers"`
