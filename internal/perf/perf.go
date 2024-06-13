@@ -50,9 +50,7 @@ const workerPrefix = "worker-"
 const preparePrefix = "prep-"
 
 var mutex = &sync.Mutex{}
-var limiter *rate.Limiter
 var TRANSPORT_TYPE = "websockets"
-var wsReadAhead = uint16(50)
 
 var METRICS_NAMESPACE = "ffperf"
 var METRICS_SUBSYSTEM = "runner"
