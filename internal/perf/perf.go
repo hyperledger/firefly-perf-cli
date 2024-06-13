@@ -21,6 +21,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"os/signal"
@@ -548,53 +549,29 @@ perfLoop:
 		if pr.cfg.MaxActions > 0 && int64(getMetricVal(totalActionsCounter)) >= pr.cfg.MaxActions {
 			break perfLoop
 		}
+		rateLimiter := rate.NewLimiter(rate.Limit(math.MaxFloat64), math.MaxInt)
 
 		if pr.cfg.MaxSubmissionsPerSecond > 0 {
-			// control send rate
-			secondTicker := time.NewTicker(1 * time.Second)
-			select {
-			case <-signalCh:
-				break perfLoop
-			case <-secondTicker.C:
-				for j := 0; j < pr.cfg.MaxSubmissionsPerSecond; j++ {
-					pr.bfr <- j
-				}
-				i++
-				if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
-					if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-						break perfLoop
-					}
-					lastCheckedTime = time.Now()
-				}
-				break
-			case <-timeout:
-				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-					break perfLoop
-				}
-				lastCheckedTime = time.Now()
-				break
-			}
+			rateLimiter = rate.NewLimiter(rate.Limit(pr.cfg.MaxSubmissionsPerSecond), pr.cfg.MaxSubmissionsPerSecond)
+		}
 
-		} else {
-			select {
-			case <-signalCh:
-				break perfLoop
-			case pr.bfr <- i:
-				i++
-				if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
-					if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
-						break perfLoop
-					}
-					lastCheckedTime = time.Now()
-				}
-				break
-			case <-timeout:
+		select {
+		case <-signalCh:
+			break perfLoop
+		case pr.bfr <- i:
+			rateLimiter.Wait(pr.ctx)
+			i++
+			if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
 				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 					break perfLoop
 				}
 				lastCheckedTime = time.Now()
-				break
 			}
+		case <-timeout:
+			if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+				break perfLoop
+			}
+			lastCheckedTime = time.Now()
 		}
 
 	}
