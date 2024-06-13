@@ -539,25 +539,29 @@ func (pr *perfRunner) Start() (err error) {
 	i := 0
 	lastCheckedTime := time.Now()
 
+	rateLimiter := rate.NewLimiter(rate.Limit(math.MaxFloat64), math.MaxInt)
+
+	if pr.cfg.MaxSubmissionsPerSecond > 0 {
+		rateLimiter = rate.NewLimiter(rate.Limit(pr.cfg.MaxSubmissionsPerSecond), pr.cfg.MaxSubmissionsPerSecond)
+	}
+	log.Infof("Sending rate: %f per second with %d burst", rateLimiter.Limit(), rateLimiter.Burst())
 perfLoop:
 	for pr.daemon || time.Now().Unix() < pr.endTime {
 		timeout := time.After(60 * time.Second)
-
 		// If we've been given a maximum number of actions to perform, check if we're done
 		if pr.cfg.MaxActions > 0 && int64(getMetricVal(totalActionsCounter)) >= pr.cfg.MaxActions {
 			break perfLoop
-		}
-		rateLimiter := rate.NewLimiter(rate.Limit(math.MaxFloat64), math.MaxInt)
-
-		if pr.cfg.MaxSubmissionsPerSecond > 0 {
-			rateLimiter = rate.NewLimiter(rate.Limit(pr.cfg.MaxSubmissionsPerSecond), pr.cfg.MaxSubmissionsPerSecond)
 		}
 
 		select {
 		case <-signalCh:
 			break perfLoop
 		case pr.bfr <- i:
-			rateLimiter.Wait(pr.ctx)
+			err = rateLimiter.Wait(pr.ctx)
+			if err != nil {
+				log.Panic(fmt.Errorf("rate limiter failed"))
+				break perfLoop
+			}
 			i++
 			if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
 				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
