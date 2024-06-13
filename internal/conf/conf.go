@@ -54,6 +54,7 @@ type RunnerConfig struct {
 	RampLength                time.Duration
 	SkipMintConfirmations     bool // deprecated
 	NoWaitSubmission          bool
+	MaxSubmissionsPerSecond   int
 	SubscriptionCoreOptions   *core.SubscriptionCoreOptions
 }
 
@@ -87,6 +88,7 @@ type InstanceConfig struct {
 	RampLength                time.Duration                 `json:"rampLength,omitempty" yaml:"rampLength,omitempty"`
 	SkipMintConfirmations     bool                          `json:"skipMintConfirmations" yaml:"skipMintConfirmations"` // deprecated
 	NoWaitSubmission          bool                          `json:"noWaitSubmission" yaml:"noWaitSubmission"`
+	MaxSubmissionsPerSecond   int                           `json:"maxSubmissionsPerSecond" yaml:"maxSubmissionsPerSecond"`
 	DelinquentAction          string                        `json:"delinquentAction,omitempty" yaml:"delinquentAction,omitempty"`
 	PerWorkerSigningKeyPrefix string                        `json:"perWorkerSigningKeyPrefix,omitempty" yaml:"perWorkerSigningKeyPrefix,omitempty"`
 	SubscriptionCoreOptions   *core.SubscriptionCoreOptions `json:"subscriptionOptions,omitempty" yaml:"subscriptionOptions,omitempty"`

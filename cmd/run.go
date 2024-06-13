@@ -217,6 +217,7 @@ func generateRunnerConfigFromInstance(instance *conf.InstanceConfig, perfConfig 
 	runnerConfig.LogLevel = perfConfig.LogLevel
 	runnerConfig.SkipMintConfirmations = instance.SkipMintConfirmations
 	runnerConfig.NoWaitSubmission = instance.NoWaitSubmission
+	runnerConfig.MaxSubmissionsPerSecond = instance.MaxSubmissionsPerSecond
 	runnerConfig.Length = instance.Length
 	runnerConfig.Daemon = perfConfig.Daemon
 	runnerConfig.LogEvents = perfConfig.LogEvents

@@ -199,6 +199,7 @@ type perfRunner struct {
 	subscriptionIDsForNodes    map[string][]string
 	daemon                     bool
 	sender                     string
+	maxSubmissionsPerSecond    int
 	totalWorkers               int
 }
 
@@ -549,25 +550,54 @@ perfLoop:
 			break perfLoop
 		}
 
-		select {
-		case <-signalCh:
-			break perfLoop
-		case pr.bfr <- i:
-			i++
-			if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
+		if pr.maxSubmissionsPerSecond > 0 {
+			// control send rate
+			secondTicker := time.NewTicker(1 * time.Second)
+			select {
+			case <-signalCh:
+				break perfLoop
+			case <-secondTicker.C:
+				for j := 0; j < pr.maxSubmissionsPerSecond; j++ {
+					pr.bfr <- j
+				}
+				i++
+				if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
+					if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+						break perfLoop
+					}
+					lastCheckedTime = time.Now()
+				}
+				break
+			case <-timeout:
 				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
 					break perfLoop
 				}
 				lastCheckedTime = time.Now()
+				break
 			}
-			break
-		case <-timeout:
-			if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+
+		} else {
+			select {
+			case <-signalCh:
 				break perfLoop
+			case pr.bfr <- i:
+				i++
+				if time.Since(lastCheckedTime).Seconds() > pr.cfg.MaxTimePerAction.Seconds() {
+					if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+						break perfLoop
+					}
+					lastCheckedTime = time.Now()
+				}
+				break
+			case <-timeout:
+				if pr.detectDelinquentMsgs() && pr.cfg.DelinquentAction == conf.DelinquentActionExit.String() {
+					break perfLoop
+				}
+				lastCheckedTime = time.Now()
+				break
 			}
-			lastCheckedTime = time.Now()
-			break
 		}
+
 	}
 
 	// If configured, check that the balance of the mint recipient address is correct
