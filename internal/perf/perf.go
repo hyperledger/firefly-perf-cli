@@ -199,7 +199,6 @@ type perfRunner struct {
 	subscriptionIDsForNodes    map[string][]string
 	daemon                     bool
 	sender                     string
-	maxSubmissionsPerSecond    int
 	totalWorkers               int
 }
 
@@ -550,14 +549,14 @@ perfLoop:
 			break perfLoop
 		}
 
-		if pr.maxSubmissionsPerSecond > 0 {
+		if pr.cfg.MaxSubmissionsPerSecond > 0 {
 			// control send rate
 			secondTicker := time.NewTicker(1 * time.Second)
 			select {
 			case <-signalCh:
 				break perfLoop
 			case <-secondTicker.C:
-				for j := 0; j < pr.maxSubmissionsPerSecond; j++ {
+				for j := 0; j < pr.cfg.MaxSubmissionsPerSecond; j++ {
 					pr.bfr <- j
 				}
 				i++
