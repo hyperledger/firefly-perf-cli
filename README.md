@@ -133,9 +133,10 @@ There are various options for creating your own customized tests. A full list of
   - All values default to `0` which has the effect of not limiting the rate of the test.
   - The test will allow at most `startRate` actions to happen per second. Over the period of `rateRampUpTime` seconds the allowed rate will increase linearly until `endRate` actions per seconds are reached. At this point the test will continue at `endRate` actions per second until the test finishes.
   - If `startRate` is the only value that is set, the test will run at that rate for the entire test.
-- Waiting for mint transactions to be confirmed before doing the next one
+- Waiting for events to be confirmed before doing the next submission
   - See `noWaitSubmission` (defaults to `false`).
   - When set to `true` each worker routine will perform its action (e.g. minting a token) and wait for confirmation of that event before doing its next action.
+  - `maxSubmissionsPerSecond` can be used to control the maximum number of submissions per second to avoid overloading the system under test.
 - Setting the features of a token being tested
   - See `supportsData` and `supportsURI` attributes of a test instance.
   - `supportsData` defaults to `true` since the sample token contract used by FireFly supports minting tokens with data. When set to `true` the message included in the mint transaction will include the ID of the worker routine and used to correlate received confirmation events.
