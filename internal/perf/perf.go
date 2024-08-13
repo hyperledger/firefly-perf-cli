@@ -1279,7 +1279,6 @@ func (pr *perfRunner) recordCompletedAction() {
 	if pr.ramping() {
 		_ = atomic.AddInt64(&pr.summary.rampSummary, 1) // increment atomically
 	} else {
-		pr.summary.totalSummary++
 		_ = atomic.AddInt64(&pr.summary.totalSummary, 1) // increment atomically
 	}
 }
